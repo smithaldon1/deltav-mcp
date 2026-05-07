@@ -11,6 +11,8 @@ import { handleBatchEvents } from "./routes/batchEvents.js";
 import { handleGraphCollection, handleGraphEntity } from "./routes/graph.js";
 import { handleHealth } from "./routes/health.js";
 import { handleHistory } from "./routes/history.js";
+import { handleMcpToolCall, handleMcpToolsList } from "./routes/mcpProxy.js";
+import { handleOpcUaPresets } from "./routes/opcuaUi.js";
 import {
   handleUiConnectionHelper,
   handleUiScenarios,
@@ -18,7 +20,7 @@ import {
   handleUiSystems,
 } from "./routes/uiMeta.js";
 import { MockHttpError } from "./utils/errors.js";
-import { readUiFile } from "./utils/static.js";
+import { hasUiBundle, readUiFile } from "./utils/static.js";
 
 function writeMalformed(res: ServerResponse): void {
   res.writeHead(200, { "content-type": "application/json" });
@@ -57,6 +59,28 @@ function requireAuth(req: IncomingMessage): void {
   validateAuthHeader(req);
 }
 
+async function maybeServeUi(requestUrl: URL, res: ServerResponse): Promise<boolean> {
+  const uiFile = await readUiFile(requestUrl.pathname);
+  if (uiFile) {
+    res.writeHead(200, { "content-type": uiFile.contentType });
+    res.end(uiFile.body);
+    return true;
+  }
+
+  if (!(await hasUiBundle())) {
+    res.writeHead(503, { "content-type": "application/json; charset=utf-8" });
+    res.end(
+      JSON.stringify({
+        error: "Mock UI assets are not built.",
+        action: "Run `npm run dev:mock` or `npm run build -w mock-deltav-edge-ui`, then reload http://localhost:8080/.",
+      }),
+    );
+    return true;
+  }
+
+  return false;
+}
+
 export function createMockServer(config: MockConfig): Server {
   return createServer(async (req, res) => {
     try {
@@ -88,6 +112,31 @@ export function createMockServer(config: MockConfig): Server {
         return;
       }
 
+      if (requestUrl.pathname === "/api/mock-ui/opcua-presets") {
+        handleOpcUaPresets(config, res);
+        return;
+      }
+
+      if (requestUrl.pathname === "/api/mcp/tools/list" || requestUrl.pathname === "/api/mcp/opcua/tools/list") {
+        await handleMcpToolsList(config, res, "opcua");
+        return;
+      }
+
+      if (requestUrl.pathname === "/api/mcp/tools/call" || requestUrl.pathname === "/api/mcp/opcua/tools/call") {
+        await handleMcpToolCall(config, req, res, "opcua");
+        return;
+      }
+
+      if (requestUrl.pathname === "/api/mcp/rest/tools/list") {
+        await handleMcpToolsList(config, res, "rest");
+        return;
+      }
+
+      if (requestUrl.pathname === "/api/mcp/rest/tools/call") {
+        await handleMcpToolCall(config, req, res, "rest");
+        return;
+      }
+
       if (await maybeSimulateRequest(requestUrl, req, res)) {
         return;
       }
@@ -103,10 +152,7 @@ export function createMockServer(config: MockConfig): Server {
       }
 
       if (!requestUrl.pathname.startsWith(config.basePath)) {
-        const uiFile = await readUiFile(requestUrl.pathname);
-        if (uiFile) {
-          res.writeHead(200, { "content-type": uiFile.contentType });
-          res.end(uiFile.body);
+        if (await maybeServeUi(requestUrl, res)) {
           return;
         }
       }

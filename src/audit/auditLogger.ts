@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import type { DeltaVMcpMode } from "../config/env.js";
-import { sanitizeForError } from "../utils/errors.js";
+import type { DeltaVDataSource, DeltaVMcpMode } from "../config/env.js";
+import { sanitizeForError } from "../utils/redaction.js";
 import { nowIsoString } from "../utils/time.js";
 
 export interface AuditEntry {
@@ -11,6 +11,7 @@ export interface AuditEntry {
   readonly status: "success" | "error" | "refused";
   readonly errorSummary: unknown;
   readonly mode: DeltaVMcpMode;
+  readonly dataSource: DeltaVDataSource;
   readonly callerSession: string | undefined;
 }
 

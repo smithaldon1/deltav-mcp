@@ -1,5 +1,5 @@
 services:
-  deltav-edge-mcp-server:
+  deltav-edge-mcp-rest:
     build:
       context: .
     image: deltav-edge-mcp-server:local
@@ -7,6 +7,8 @@ services:
       - .env
     environment:
       DELTAV_HTTP_ENABLED: "true"
+      DELTAV_HTTP_PORT: "3000"
+      DELTAV_DATA_SOURCE: "MOCK_EDGE_REST"
       DELTAV_EDGE_BASE_URL: "http://mock-deltav-edge:8080/edge/"
       DELTAV_EDGE_VERIFY_TLS: "false"
       DELTAV_USE_MOCK: "true"
@@ -18,7 +20,7 @@ services:
       DELTAV_EDGE_ENDPOINT_ALARMS_EVENTS: "/api/v1/ae"
       DELTAV_EDGE_ENDPOINT_BATCH_EVENTS: "/api/v1/batchevent"
     ports:
-      - "${DELTAV_HTTP_PORT:-3000}:3000"
+      - "3000:3000"
     volumes:
       - ./logs:/app/logs
       - ./generated-packages:/app/generated-packages
@@ -31,6 +33,47 @@ services:
     depends_on:
       - mock-deltav-edge
 
+  deltav-edge-mcp-opcua:
+    build:
+      context: .
+    image: deltav-edge-mcp-server:local
+    env_file:
+      - .env
+    environment:
+      DELTAV_HTTP_ENABLED: "true"
+      DELTAV_HTTP_PORT: "3001"
+      DELTAV_DATA_SOURCE: "OPCUA"
+      DELTAV_EDGE_BASE_URL: "http://mock-deltav-edge:8080/edge/"
+      DELTAV_EDGE_VERIFY_TLS: "false"
+      DELTAV_USE_MOCK: "true"
+      DELTAV_EDGE_ENDPOINT_AUTH_TOKEN: "/api/v1/Login/GetAuthToken/profile"
+      DELTAV_EDGE_ENDPOINT_GRAPH_COLLECTION: "/api/v1/graph"
+      DELTAV_EDGE_ENDPOINT_GRAPH_ENTITY: "/api/v1/graph/{entityId}"
+      DELTAV_EDGE_ENDPOINT_HISTORY_COLLECTION: "/api/v1/history"
+      DELTAV_EDGE_ENDPOINT_HISTORY_BY_ID: "/api/v1/history/{entityId}"
+      DELTAV_EDGE_ENDPOINT_ALARMS_EVENTS: "/api/v1/ae"
+      DELTAV_EDGE_ENDPOINT_BATCH_EVENTS: "/api/v1/batchevent"
+      DELTAV_OPCUA_ENDPOINT_URL: "opc.tcp://mock-opcua-server:4840/UA/DeltaVMock"
+      DELTAV_OPCUA_SECURITY_MODE: "None"
+      DELTAV_OPCUA_SECURITY_POLICY: "None"
+      DELTAV_OPCUA_ENABLE_SUBSCRIPTIONS: "true"
+      DELTAV_OPCUA_ENABLE_WRITES: "false"
+      DELTAV_OPCUA_NODE_MAP_PATH: "./config/opcua-node-map.json"
+    ports:
+      - "3101:3001"
+    volumes:
+      - ./logs:/app/logs
+      - ./generated-packages:/app/generated-packages
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: false
+    depends_on:
+      - mock-deltav-edge
+      - mock-opcua-server
+
   mock-deltav-edge:
     build:
       context: ./mock-deltav-edge
@@ -39,8 +82,30 @@ services:
       MOCK_DELTAV_EDGE_HOST: "0.0.0.0"
       MOCK_DELTAV_EDGE_PORT: "8080"
       MOCK_DELTAV_EDGE_BASE_PATH: "/edge/api/v1"
+      MOCK_DELTAV_EDGE_MCP_REST_BASE_URL: "http://deltav-edge-mcp-rest:3000/mcp"
+      MOCK_DELTAV_EDGE_MCP_OPCUA_BASE_URL: "http://deltav-edge-mcp-opcua:3001/mcp"
+      MOCK_OPCUA_BROWSER_ENDPOINT: "opc.tcp://localhost:4840/UA/DeltaVMock"
     ports:
       - "8080:8080"
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+  mock-opcua-server:
+    build:
+      context: ./mock-opcua-server
+    image: mock-opcua-server:local
+    environment:
+      MOCK_OPCUA_HOST: "0.0.0.0"
+      MOCK_OPCUA_PORT: "4840"
+      MOCK_OPCUA_RESOURCE_PATH: "/UA/DeltaVMock"
+      MOCK_OPCUA_ALLOW_ANONYMOUS: "true"
+      MOCK_OPCUA_USERNAME: "demo"
+      MOCK_OPCUA_PASSWORD: "demo"
+    ports:
+      - "4840:4840"
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true

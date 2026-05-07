@@ -1,0 +1,42 @@
+{
+  "PUMP_101/RUN_ST.CV": {
+    "nodeId": "ns=1;s=AREA_A/UNIT_100/PUMP_101/RUN_ST.CV",
+    "area": "AREA_A",
+    "entityId": "PUMP_101/RUN_ST.CV",
+    "entityPath": "DemoDeltaV/AREA_A/UNIT_100/PUMP_101/RUN_ST.CV",
+    "browsePath": ["DemoDeltaV", "AREA_A", "UNIT_100", "PUMP_101", "RUN_ST.CV"],
+    "type": "BOOL"
+  },
+  "PUMP_101/FAULT.CV": {
+    "nodeId": "ns=1;s=AREA_A/UNIT_100/PUMP_101/FAULT.CV",
+    "area": "AREA_A",
+    "entityId": "PUMP_101/FAULT.CV",
+    "entityPath": "DemoDeltaV/AREA_A/UNIT_100/PUMP_101/FAULT.CV",
+    "browsePath": ["DemoDeltaV", "AREA_A", "UNIT_100", "PUMP_101", "FAULT.CV"],
+    "type": "BOOL"
+  },
+  "TIC_301/PV.CV": {
+    "nodeId": "ns=1;s=AREA_B/REACTOR_01/TIC_301/PV.CV",
+    "area": "AREA_B",
+    "entityId": "TIC_301/PV.CV",
+    "entityPath": "DemoDeltaV/AREA_B/REACTOR_01/TIC_301/PV.CV",
+    "browsePath": ["DemoDeltaV", "AREA_B", "REACTOR_01", "TIC_301", "PV.CV"],
+    "type": "DOUBLE"
+  },
+  "TIC_301/SP.CV": {
+    "nodeId": "ns=1;s=AREA_B/REACTOR_01/TIC_301/SP.CV",
+    "area": "AREA_B",
+    "entityId": "TIC_301/SP.CV",
+    "entityPath": "DemoDeltaV/AREA_B/REACTOR_01/TIC_301/SP.CV",
+    "browsePath": ["DemoDeltaV", "AREA_B", "REACTOR_01", "TIC_301", "SP.CV"],
+    "type": "DOUBLE"
+  },
+  "TIC_301/OUT.CV": {
+    "nodeId": "ns=1;s=AREA_B/REACTOR_01/TIC_301/OUT.CV",
+    "area": "AREA_B",
+    "entityId": "TIC_301/OUT.CV",
+    "entityPath": "DemoDeltaV/AREA_B/REACTOR_01/TIC_301/OUT.CV",
+    "browsePath": ["DemoDeltaV", "AREA_B", "REACTOR_01", "TIC_301", "OUT.CV"],
+    "type": "DOUBLE"
+  }
+}

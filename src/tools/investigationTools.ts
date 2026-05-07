@@ -110,7 +110,7 @@ export function registerInvestigationTools(register: ToolRegister, context: Tool
 
           const trends = await Promise.all(
             input.entityIds.map(async (entityId) => {
-              const history = await context.client.getHistoryById(
+              const history = await context.dataSource.getHistoryById(
                 entityId,
                 start.toISOString(),
                 end.toISOString(),
@@ -146,7 +146,7 @@ export function registerInvestigationTools(register: ToolRegister, context: Tool
         async () => {
           const start = parseIsoDateTime(input.start, "start");
           const end = parseIsoDateTime(input.end, "end");
-          const alarms = await context.client.getAlarmsEvents({
+          const alarms = await context.dataSource.getAlarmsEvents({
             start: start.toISOString(),
             end: end.toISOString(),
             area: input.area,
@@ -159,7 +159,7 @@ export function registerInvestigationTools(register: ToolRegister, context: Tool
             input.entityId === undefined
               ? []
               : (
-                  await context.client.getHistoryById(
+                  await context.dataSource.getHistoryById(
                     input.entityId,
                     start.toISOString(),
                     end.toISOString(),
@@ -194,7 +194,7 @@ export function registerInvestigationTools(register: ToolRegister, context: Tool
         async () => {
           const start = parseIsoDateTime(input.start, "start");
           const end = parseIsoDateTime(input.end, "end");
-          const alarms = await context.client.getAlarmsEvents({
+          const alarms = await context.dataSource.getAlarmsEvents({
             start: start.toISOString(),
             end: end.toISOString(),
             area: undefined,
@@ -204,7 +204,7 @@ export function registerInvestigationTools(register: ToolRegister, context: Tool
           });
           const trendPack = await Promise.all(
             input.entityIds.map((entityId) =>
-              context.client.getHistoryById(entityId, start.toISOString(), end.toISOString(), input.maxPoints),
+              context.dataSource.getHistoryById(entityId, start.toISOString(), end.toISOString(), input.maxPoints),
             ),
           );
 
@@ -242,7 +242,7 @@ export function registerInvestigationTools(register: ToolRegister, context: Tool
           ...(meta?.sessionId ? { sessionId: meta.sessionId } : {}),
         },
         async () => {
-          const alarms = await context.client.getAlarmsEvents({
+          const alarms = await context.dataSource.getAlarmsEvents({
             start: parseIsoDateTime(input.start, "start").toISOString(),
             end: parseIsoDateTime(input.end, "end").toISOString(),
             area: input.area,
@@ -275,7 +275,7 @@ export function registerInvestigationTools(register: ToolRegister, context: Tool
           ...(meta?.sessionId ? { sessionId: meta.sessionId } : {}),
         },
         async () => {
-          const alarms = await context.client.getAlarmsEvents({
+          const alarms = await context.dataSource.getAlarmsEvents({
             start: parseIsoDateTime(input.start, "start").toISOString(),
             end: parseIsoDateTime(input.end, "end").toISOString(),
             area: input.area,
@@ -302,7 +302,7 @@ export function registerInvestigationTools(register: ToolRegister, context: Tool
           ...(meta?.sessionId ? { sessionId: meta.sessionId } : {}),
         },
         async () => {
-          const alarms = await context.client.getAlarmsEvents({
+          const alarms = await context.dataSource.getAlarmsEvents({
             start: parseIsoDateTime(input.start, "start").toISOString(),
             end: parseIsoDateTime(input.end, "end").toISOString(),
             area: input.area,
@@ -329,7 +329,7 @@ export function registerInvestigationTools(register: ToolRegister, context: Tool
           ...(meta?.sessionId ? { sessionId: meta.sessionId } : {}),
         },
         async () => {
-          const alarms = await context.client.getAlarmsEvents({
+          const alarms = await context.dataSource.getAlarmsEvents({
             start: parseIsoDateTime(input.start, "start").toISOString(),
             end: parseIsoDateTime(input.end, "end").toISOString(),
             area: input.area,
@@ -381,8 +381,8 @@ export function registerInvestigationTools(register: ToolRegister, context: Tool
           const afterEnd = new Date(change.getTime() + input.windowHours * 60 * 60 * 1000);
 
           const [before, after] = await Promise.all([
-            context.client.getHistoryById(input.entityId, beforeStart.toISOString(), change.toISOString(), input.maxPoints),
-            context.client.getHistoryById(input.entityId, change.toISOString(), afterEnd.toISOString(), input.maxPoints),
+            context.dataSource.getHistoryById(input.entityId, beforeStart.toISOString(), change.toISOString(), input.maxPoints),
+            context.dataSource.getHistoryById(input.entityId, change.toISOString(), afterEnd.toISOString(), input.maxPoints),
           ]);
 
           const beforeSummary = numericSummary(before.values);

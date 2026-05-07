@@ -9,10 +9,14 @@ const MAX_HISTORY_RANGE_HOURS = 24 * 14;
 
 const schema = z.object({
   entityId: z.string().min(1),
+  field: z.string().min(1).optional(),
   area: z.string().min(1).optional(),
   entityPath: z.string().min(1).optional(),
-  start: z.string().min(1),
-  end: z.string().min(1),
+  start: z.string().min(1).optional(),
+  end: z.string().min(1).optional(),
+  startTime: z.string().min(1).optional(),
+  endTime: z.string().min(1).optional(),
+  aggregation: z.string().min(1).optional(),
   maxPoints: z.number().int().min(1).max(10_000).default(500),
 });
 
@@ -57,21 +61,31 @@ export function registerDeltavGetHistoryTool(
           ...(meta?.sessionId ? { sessionId: meta.sessionId } : {}),
         },
         async () => {
+          const historyEntityId =
+            input.field && !input.entityId.endsWith(`/${input.field}`)
+              ? `${input.entityId}/${input.field}`
+              : input.entityId;
           assertAccessAllowed(context.config, {
-            entityId: input.entityId,
+            entityId: historyEntityId,
             area: input.area,
             entityPath: input.entityPath,
           });
-          const start = parseIsoDateTime(input.start, "start");
-          const end = parseIsoDateTime(input.end, "end");
+          const startRaw = input.startTime ?? input.start;
+          const endRaw = input.endTime ?? input.end;
+          if (!startRaw || !endRaw) {
+            throw new Error("startTime/endTime (or start/end) are required.");
+          }
+          const start = parseIsoDateTime(startRaw, "startTime");
+          const end = parseIsoDateTime(endRaw, "endTime");
           assertTimeRange(start, end, MAX_HISTORY_RANGE_HOURS);
 
-          const history = await context.client.getHistoryById(
-            input.entityId,
-            start.toISOString(),
-            end.toISOString(),
-            input.maxPoints,
-          );
+          const history = await context.dataSource.getHistory({
+            entityId: historyEntityId,
+            start: start.toISOString(),
+            end: end.toISOString(),
+            maxPoints: input.maxPoints,
+            ...(input.aggregation ? { aggregation: input.aggregation } : {}),
+          });
 
           return {
             ...history,

@@ -1,6 +1,15 @@
 # Pattern Library
 
-The engineering pattern library provides reusable reference structures for:
+The engineering pattern library exposes reusable structured reference patterns for common control and equipment scenarios.
+
+## Access Tools
+
+- `engineering_list_patterns`
+- `engineering_get_pattern`
+
+## Available Pattern Coverage
+
+The current library includes patterns such as:
 
 - PID loop
 - cascade loop
@@ -17,11 +26,52 @@ The engineering pattern library provides reusable reference structures for:
 - batch phase
 - equipment module
 - unit module
-- permissive/interlock logic
+- permissive and interlock logic
 
-Use:
+## What A Pattern Contains
 
-- `engineering_list_patterns`
-- `engineering_get_pattern`
+Pattern responses are structured engineering references that can include:
 
-Each pattern includes purpose, IO, parameters, alarms, interlocks, operating modes, failure modes, operator actions, test cases, common mistakes, implementation notes, and open engineering questions.
+- purpose
+- I/O expectations
+- parameters
+- alarms
+- interlocks
+- operating modes
+- failure modes
+- operator actions
+- test cases
+- common mistakes
+- implementation notes
+- open engineering questions
+
+## Example Usage
+
+List patterns:
+
+```json
+{}
+```
+
+Get a specific pattern:
+
+```json
+{
+  "patternName": "reactor-temperature-control"
+}
+```
+
+## Intended Use
+
+Use patterns to:
+
+- bootstrap structured offline design inputs
+- compare a proposal against a known reference shape
+- seed control narratives, interlock matrices, and test protocols
+- standardize recurring equipment and module concepts
+
+## Safety Notes
+
+- patterns are references, not deployable controller content
+- they do not replace site standards, hazard review, or MOC
+- use them as structured starting points for qualified engineering review

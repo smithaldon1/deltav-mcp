@@ -8,3 +8,4 @@ generated-packages
 tests
 docs
 mock-deltav-edge/dist
+mock-opcua-server/dist

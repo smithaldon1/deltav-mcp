@@ -8,12 +8,16 @@ import { withToolAudit } from "./toolUtils.js";
 const MAX_ALARM_RANGE_HOURS = 24 * 7;
 
 const schema = z.object({
-  start: z.string().min(1),
-  end: z.string().min(1),
+  start: z.string().min(1).optional(),
+  end: z.string().min(1).optional(),
+  startTime: z.string().min(1).optional(),
+  endTime: z.string().min(1).optional(),
   area: z.string().min(1).optional(),
   entityId: z.string().min(1).optional(),
   page: z.number().int().min(1).default(1),
+  pageNumber: z.number().int().min(1).optional(),
   pageSize: z.number().int().min(1).max(500).default(100),
+  severity: z.string().min(1).optional(),
 });
 
 export function registerDeltavGetAlarmsEventsTool(
@@ -39,16 +43,21 @@ export function registerDeltavGetAlarmsEventsTool(
             entityId: input.entityId,
             entityPath: undefined,
           });
-          const start = parseIsoDateTime(input.start, "start");
-          const end = parseIsoDateTime(input.end, "end");
+          const startRaw = input.startTime ?? input.start;
+          const endRaw = input.endTime ?? input.end;
+          if (!startRaw || !endRaw) {
+            throw new Error("startTime/endTime (or start/end) are required.");
+          }
+          const start = parseIsoDateTime(startRaw, "startTime");
+          const end = parseIsoDateTime(endRaw, "endTime");
           assertTimeRange(start, end, MAX_ALARM_RANGE_HOURS);
 
-          return context.client.getAlarmsEvents({
+          return context.dataSource.getAlarmsEvents({
             start: start.toISOString(),
             end: end.toISOString(),
             area: input.area,
             entityId: input.entityId,
-            page: input.page,
+            page: input.pageNumber ?? input.page,
             pageSize: input.pageSize,
           });
         },

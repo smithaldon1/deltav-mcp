@@ -8,6 +8,8 @@ const schema = z.object({
   entityId: z.string().min(1),
   area: z.string().min(1).optional(),
   entityPath: z.string().min(1).optional(),
+  includeRelationships: z.boolean().default(true),
+  includeProperties: z.boolean().default(true),
 });
 
 export function registerDeltavGetNodeContextTool(
@@ -33,7 +35,10 @@ export function registerDeltavGetNodeContextTool(
             area: input.area,
             entityPath: input.entityPath,
           });
-          return context.client.getGraphByEntityId(input.entityId);
+          return context.dataSource.getNodeContext(input.entityId, {
+            includeRelationships: input.includeRelationships,
+            includeProperties: input.includeProperties,
+          });
         },
       ),
   );

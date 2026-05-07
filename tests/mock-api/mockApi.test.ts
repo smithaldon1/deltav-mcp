@@ -1,3 +1,4 @@
+import { createServer, type Server } from "node:http";
 import { describe, expect, it } from "vitest";
 import { startMockFixture } from "../helpers/mockServer.js";
 
@@ -72,7 +73,139 @@ describe("mock DeltaV Edge API", () => {
 
     expect(statusPayload.uiEnabled).toBe(true);
     expect(statusPayload.endpoints).toContain("GET /edge/api/v1/graph");
+    expect(statusPayload.mcpToolsListPath).toBe("/api/mcp/rest/tools/list");
+    expect(statusPayload.mcpToolCallPath).toBe("/api/mcp/rest/tools/call");
+    expect(statusPayload.mcpRestToolsListPath).toBe("/api/mcp/rest/tools/list");
+    expect(statusPayload.mcpOpcUaToolsListPath).toBe("/api/mcp/opcua/tools/list");
+    expect(statusPayload.mockOpcUaEndpoint).toContain("opc.tcp://");
     expect(graphPayload.results.length).toBeGreaterThan(0);
+  });
+
+  it("returns OPC UA presets for the console workbench", async () => {
+    const { baseUrl } = await startMockFixture({
+      mockOpcUaEndpoint: "opc.tcp://127.0.0.1:4840/UA/TestMock",
+    });
+    const response = await fetch(`${baseUrl.replace("/edge/", "")}/api/mock-ui/opcua-presets`);
+    const payload = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(payload.endpoint).toBe("opc.tcp://127.0.0.1:4840/UA/TestMock");
+    expect(payload.presets.length).toBeGreaterThan(0);
+    expect(payload.presets[0]).toMatchObject({
+      logicalId: expect.any(String),
+      nodeId: expect.stringContaining("ns="),
+      browsePath: expect.stringContaining("/Objects/"),
+    });
+  });
+
+  it("proxies tools/list and tools/call to the MCP HTTP endpoint", async () => {
+    const fakeMcpServer = await new Promise<Server>((resolve) => {
+      const server = createServer((req, res) => {
+        if (req.url !== "/mcp" || req.method !== "POST") {
+          res.writeHead(404).end();
+          return;
+        }
+
+        const chunks: Buffer[] = [];
+        req.on("data", (chunk) => {
+          chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+        });
+        req.on("end", () => {
+          const payload = JSON.parse(Buffer.concat(chunks).toString("utf8")) as {
+            id: number;
+            method: string;
+            params?: { name?: string };
+          };
+
+          res.writeHead(200, { "content-type": "text/event-stream" });
+          if (payload.method === "tools/list") {
+            res.end(
+              `event: message\ndata: ${JSON.stringify({
+                jsonrpc: "2.0",
+                id: payload.id,
+                result: {
+                  tools: [{ name: "opcua_test_connection", description: "Test OPC UA connection." }],
+                },
+              })}\n\n`,
+            );
+            return;
+          }
+
+          if (payload.method === "tools/call") {
+            res.end(
+              `event: message\ndata: ${JSON.stringify({
+                jsonrpc: "2.0",
+                id: payload.id,
+                result: {
+                  content: [
+                    {
+                      type: "text",
+                      text: JSON.stringify({
+                        allowed: true,
+                        tool: payload.params?.name ?? "unknown",
+                      }),
+                    },
+                  ],
+                },
+              })}\n\n`,
+            );
+            return;
+          }
+
+          res.end(
+            `event: message\ndata: ${JSON.stringify({
+              jsonrpc: "2.0",
+              id: payload.id,
+              error: { code: -32601, message: "Unknown method" },
+            })}\n\n`,
+          );
+        });
+      });
+
+      server.listen(0, "127.0.0.1", () => resolve(server));
+    });
+
+    try {
+      const address = fakeMcpServer.address();
+      if (!address || typeof address === "string") {
+        throw new Error("Failed to resolve fake MCP server address.");
+      }
+
+      const { baseUrl } = await startMockFixture({
+        mcpRestBaseUrl: `http://127.0.0.1:${address.port}/mcp`,
+        mcpOpcUaBaseUrl: `http://127.0.0.1:${address.port}/mcp`,
+      });
+
+      const toolsResponse = await fetch(`${baseUrl.replace("/edge/", "")}/api/mcp/tools/list`);
+      const toolsPayload = await toolsResponse.json();
+      expect(toolsResponse.status).toBe(200);
+      expect(toolsPayload.tools).toEqual([
+        { name: "opcua_test_connection", description: "Test OPC UA connection.", target: "opcua" },
+      ]);
+
+      const callResponse = await fetch(`${baseUrl.replace("/edge/", "")}/api/mcp/tools/call`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          name: "opcua_test_connection",
+          arguments: {},
+        }),
+      });
+      const callPayload = await callResponse.json();
+
+      expect(callResponse.status).toBe(200);
+      expect(callPayload.name).toBe("opcua_test_connection");
+      expect(callPayload.target).toBe("opcua");
+      expect(callPayload.isError).toBe(false);
+      expect(callPayload.result).toEqual({
+        allowed: true,
+        tool: "opcua_test_connection",
+      });
+    } finally {
+      await new Promise<void>((resolve, reject) => {
+        fakeMcpServer.close((error) => (error ? reject(error) : resolve()));
+      });
+    }
   });
 
   it("supports history query and aggregation", async () => {

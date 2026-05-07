@@ -47,7 +47,7 @@ export function registerBatchTools(register: ToolRegister, context: ToolContext)
           ...(meta?.sessionId ? { sessionId: meta.sessionId } : {}),
         },
         async () =>
-          context.client.getBatchEvents({
+          context.dataSource.getBatchEvents({
             start: parseIsoDateTime(input.start, "start").toISOString(),
             end: parseIsoDateTime(input.end, "end").toISOString(),
             recipe: input.recipe,
@@ -74,7 +74,7 @@ export function registerBatchTools(register: ToolRegister, context: ToolContext)
           ...(meta?.sessionId ? { sessionId: meta.sessionId } : {}),
         },
         async () => {
-          const events = await context.client.getBatchEvents({
+          const events = await context.dataSource.getBatchEvents({
             start: parseIsoDateTime(input.start, "start").toISOString(),
             end: parseIsoDateTime(input.end, "end").toISOString(),
             recipe: input.recipe,
@@ -107,7 +107,7 @@ export function registerBatchTools(register: ToolRegister, context: ToolContext)
         },
         async () => {
           const [left, right] = await Promise.all([
-            context.client.getBatchEvents({
+            context.dataSource.getBatchEvents({
               start: parseIsoDateTime(input.start, "start").toISOString(),
               end: parseIsoDateTime(input.end, "end").toISOString(),
               recipe: undefined,
@@ -117,7 +117,7 @@ export function registerBatchTools(register: ToolRegister, context: ToolContext)
               page: 1,
               pageSize: 200,
             }),
-            context.client.getBatchEvents({
+            context.dataSource.getBatchEvents({
               start: parseIsoDateTime(input.start, "start").toISOString(),
               end: parseIsoDateTime(input.end, "end").toISOString(),
               recipe: undefined,
@@ -155,7 +155,7 @@ export function registerBatchTools(register: ToolRegister, context: ToolContext)
           ...(meta?.sessionId ? { sessionId: meta.sessionId } : {}),
         },
         async () => {
-          const events = await context.client.getBatchEvents({
+          const events = await context.dataSource.getBatchEvents({
             start: parseIsoDateTime(input.start, "start").toISOString(),
             end: parseIsoDateTime(input.end, "end").toISOString(),
             recipe: input.recipe,
@@ -189,7 +189,7 @@ export function registerBatchTools(register: ToolRegister, context: ToolContext)
           ...(meta?.sessionId ? { sessionId: meta.sessionId } : {}),
         },
         async () => {
-          const events = await context.client.getBatchEvents({
+          const events = await context.dataSource.getBatchEvents({
             start: parseIsoDateTime(input.start, "start").toISOString(),
             end: parseIsoDateTime(input.end, "end").toISOString(),
             recipe: input.recipe,

@@ -2,7 +2,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { z } from "zod";
 import type { AuditLogger } from "../audit/auditLogger.js";
 import type { AppConfig } from "../config/env.js";
-import type { DeltaVEdgeClient } from "../deltav/DeltaVEdgeClient.js";
+import type { DeltaVDataSourceAdapter } from "../datasources/DeltaVDataSourceAdapter.js";
 import { toErrorSummary } from "../utils/errors.js";
 import { registerBatchTools } from "./batchTools.js";
 import { registerCreateEngineeringChangePackageTool } from "./createEngineeringChangePackage.js";
@@ -19,12 +19,13 @@ import { registerGenerateControlNarrativeTool } from "./generateControlNarrative
 import { registerGenerateInterlockMatrixTool } from "./generateInterlockMatrix.js";
 import { registerGenerateTestProtocolTool } from "./generateTestProtocol.js";
 import { registerInvestigationTools } from "./investigationTools.js";
+import { registerOpcUaTools } from "./opcuaTools.js";
 import { registerReviewTools } from "./reviewTools.js";
 import { registerValidateControlStrategyTool } from "./validateControlStrategy.js";
 
 export interface ToolContext {
   readonly config: AppConfig;
-  readonly client: DeltaVEdgeClient;
+  readonly dataSource: DeltaVDataSourceAdapter;
   readonly auditLogger: AuditLogger;
 }
 
@@ -130,4 +131,5 @@ export function registerTools(server: McpServer, context: ToolContext): void {
   registerBatchTools(register, context);
   registerReviewTools(register, context);
   registerDiagramTools(register, context);
+  registerOpcUaTools(register, context);
 }

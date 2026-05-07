@@ -4,3 +4,4 @@ dist
 coverage
 logs
 generated-packages
+.playwright-mcp

@@ -3,7 +3,8 @@ import { afterEach } from "vitest";
 import type { AppConfig } from "../../src/config/env.js";
 import { getConfig } from "../../src/config/env.js";
 import { AuditLogger } from "../../src/audit/auditLogger.js";
-import { DeltaVEdgeClient } from "../../src/deltav/DeltaVEdgeClient.js";
+import { createDataSourceAdapter } from "../../src/datasources/dataSourceFactory.js";
+import type { MockConfig } from "../../mock-deltav-edge/dist/config.js";
 import { createMockServer } from "../../mock-deltav-edge/dist/server.js";
 
 const runningServers: Server[] = [];
@@ -20,12 +21,18 @@ afterEach(async () => {
   );
 });
 
-export async function startMockFixture(): Promise<{ baseUrl: string; server: Server }> {
+export async function startMockFixture(
+  overrides: Partial<MockConfig> = {},
+): Promise<{ baseUrl: string; server: Server }> {
   const server = createMockServer({
     host: "127.0.0.1",
     port: 0,
     basePath: "/edge/api/v1",
     developmentAuthMode: true,
+    mcpRestBaseUrl: "http://127.0.0.1:3000/mcp",
+    mcpOpcUaBaseUrl: "http://127.0.0.1:3001/mcp",
+    mockOpcUaEndpoint: "opc.tcp://127.0.0.1:4840/UA/DeltaVMock",
+    ...overrides,
   });
   await new Promise<void>((resolve, reject) => {
     server.once("error", reject);
@@ -45,6 +52,7 @@ export async function startMockFixture(): Promise<{ baseUrl: string; server: Ser
 
 export function buildMockConfig(baseUrl: string, overrides: Partial<NodeJS.ProcessEnv> = {}): AppConfig {
   return getConfig({
+    DELTAV_DATA_SOURCE: "MOCK_EDGE_REST",
     DELTAV_EDGE_BASE_URL: baseUrl,
     DELTAV_EDGE_USERNAME: "demo",
     DELTAV_EDGE_PASSWORD: "demo",
@@ -74,6 +82,6 @@ export function buildToolContext(baseUrl: string, overrides: Partial<NodeJS.Proc
   return {
     config,
     auditLogger: new AuditLogger(config.auditLogPath),
-    client: new DeltaVEdgeClient(config),
+    dataSource: createDataSourceAdapter(config),
   };
 }

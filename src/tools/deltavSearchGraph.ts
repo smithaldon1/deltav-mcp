@@ -33,7 +33,7 @@ export function registerDeltavSearchGraphTool(
             entityId: undefined,
             entityPath: undefined,
           });
-          return context.client.searchGraph({
+          return context.dataSource.searchHierarchy({
             query: input.query,
             area: input.area,
             limit: input.limit,

@@ -15,6 +15,15 @@ const contentTypes: Record<string, string> = {
   ".woff2": "font/woff2",
 };
 
+export async function hasUiBundle(): Promise<boolean> {
+  try {
+    await fs.access(uiDistPath("index.html"));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export async function readUiFile(requestPath: string): Promise<{ body: Buffer; contentType: string } | null> {
   const relative = requestPath === "/" ? "index.html" : requestPath.replace(/^\/+/, "");
   const resolved = path.resolve(uiDistPath(), relative);

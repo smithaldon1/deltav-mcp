@@ -10,6 +10,8 @@
     "tests/**/*.tsx",
     "mock-deltav-edge/src/**/*.ts",
     "mock-deltav-edge/src/**/*.tsx",
+    "mock-opcua-server/src/**/*.ts",
+    "mock-opcua-server/src/**/*.tsx",
     "mock-deltav-edge/ui/**/*.ts",
     "mock-deltav-edge/ui/src/**/*.ts",
     "mock-deltav-edge/ui/src/**/*.tsx"

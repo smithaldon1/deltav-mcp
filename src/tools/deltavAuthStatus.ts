@@ -23,8 +23,16 @@ export function registerDeltavAuthStatusTool(
           ...(meta?.sessionId ? { sessionId: meta.sessionId } : {}),
         },
         async () => {
-          await context.client.authenticate(true);
-          return context.client.getAuthStatus();
+          await context.dataSource.authenticate(true);
+          const status = context.dataSource.getAuthStatus();
+          return {
+            ...status,
+            dataSource: context.config.dataSource,
+            mode: context.config.mode,
+            message: status.authenticated
+              ? "Authentication check succeeded."
+              : "Authentication check did not establish an authenticated session.",
+          };
         },
       ),
   );

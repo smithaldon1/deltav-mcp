@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import ReactFlow, { Background, Controls, MiniMap, type Edge, type Node } from "reactflow";
 import mermaid from "mermaid";
 import * as echarts from "echarts";
@@ -12,16 +12,24 @@ import {
 } from "@tanstack/react-table";
 
 type NavKey =
-  | "status"
-  | "explorer"
-  | "hierarchy"
-  | "history"
-  | "alarms"
-  | "batch"
+  | "overview"
+  | "deltaV"
+  | "trends"
+  | "events"
+  | "opcua"
+  | "runner"
   | "scenarios"
-  | "errors"
-  | "diagrams"
-  | "helper";
+  | "setup";
+
+type OpcUaWorkspace =
+  | "discovery"
+  | "browse"
+  | "reads"
+  | "translate"
+  | "sample"
+  | "monitor";
+
+type McpTarget = "rest" | "opcua";
 
 type MockStatus = {
   status: string;
@@ -34,6 +42,15 @@ type MockStatus = {
   healthEndpoint: string;
   endpoints: string[];
   uiEnabled: boolean;
+  mcpProxyPath: string;
+  mcpToolsListPath: string;
+  mcpToolCallPath: string;
+  mcpRestToolsListPath: string;
+  mcpRestToolCallPath: string;
+  mcpOpcUaToolsListPath: string;
+  mcpOpcUaToolCallPath: string;
+  mockOpcUaEndpoint: string;
+  workspaces: string[];
 };
 
 type Scenario = {
@@ -45,10 +62,6 @@ type Scenario = {
   expectedInvestigationOutputs: string[];
 };
 
-type GraphResponse = {
-  results?: GraphNode[];
-};
-
 type GraphNode = {
   id: string;
   name: string;
@@ -57,13 +70,18 @@ type GraphNode = {
   path: string;
   runtime?: Record<string, unknown>;
   relationships?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
+};
+
+type HierarchyTreeNode = GraphNode & {
+  treeChildren: HierarchyTreeNode[];
 };
 
 type HistoryResponse = {
   entityId: string;
   start: string;
   end: string;
-  values: Array<{ timestamp: string; value: number | null; quality: string }>;
+  values: Array<{ timestamp: string; value: number | null; quality?: string }>;
   aggregateValue?: number | null;
 };
 
@@ -84,13 +102,6 @@ type AlarmRecord = {
   returnToNormalTime?: string;
 };
 
-type AlarmResponse = {
-  page: number;
-  pageSize: number;
-  total: number;
-  records: AlarmRecord[];
-};
-
 type BatchRecord = {
   batchId: string;
   recipe: string;
@@ -107,17 +118,58 @@ type BatchRecord = {
   status: string;
 };
 
-type BatchResponse = {
-  page: number;
-  pageSize: number;
-  total: number;
-  records: BatchRecord[];
-};
-
 type ConnectionHelper = {
   envExample: string;
   dockerComposeExample: string;
   mcpClientConfig: Record<string, unknown>;
+};
+
+type McpTool = {
+  name: string;
+  description: string;
+  target: McpTarget;
+  inputSchema?: {
+    properties?: Record<string, unknown>;
+    required?: string[];
+  };
+};
+
+type McpToolCallResponse = {
+  name: string;
+  target?: McpTarget;
+  isError: boolean;
+  result: unknown;
+  raw: unknown;
+};
+
+type OpcUaPreset = {
+  label: string;
+  logicalId: string;
+  nodeId: string;
+  area: string;
+  browseNodeId: string;
+  browsePath: string;
+  description: string;
+};
+
+type OpcUaPresetResponse = {
+  endpoint: string;
+  presets: OpcUaPreset[];
+  monitoredSampleSuggestion: {
+    durationMs: number;
+    samplingIntervalMs: number;
+  };
+};
+
+type McpAuthStatus = {
+  authenticated: boolean;
+  baseUrl: string;
+  verifyTls: boolean;
+  tokenCached: boolean;
+  useMock: boolean;
+  dataSource?: string;
+  mode?: string;
+  message?: string;
 };
 
 type MockHeaders = {
@@ -127,35 +179,121 @@ type MockHeaders = {
   empty: boolean;
 };
 
-const navItems: Array<{ key: NavKey; label: string }> = [
-  { key: "status", label: "Status" },
-  { key: "explorer", label: "API Explorer" },
-  { key: "hierarchy", label: "Hierarchy" },
-  { key: "history", label: "History" },
-  { key: "alarms", label: "Alarms & Events" },
-  { key: "batch", label: "Batch Events" },
-  { key: "scenarios", label: "Scenarios" },
-  { key: "errors", label: "Error Simulation" },
-  { key: "diagrams", label: "Mermaid Preview" },
-  { key: "helper", label: "MCP Helper" },
+const navItems: Array<{ key: NavKey; label: string; detail: string }> = [
+  { key: "overview", label: "Overview", detail: "Console status and quick starts" },
+  { key: "deltaV", label: "DeltaV Graph", detail: "Hierarchy, runtime, and context" },
+  { key: "trends", label: "Trends", detail: "History and trend packs" },
+  { key: "events", label: "Events", detail: "Alarms, events, and batches" },
+  { key: "opcua", label: "OPC UA", detail: "Browse, reads, sampling, and monitoring" },
+  { key: "runner", label: "Tool Runner", detail: "Direct MCP tool execution" },
+  { key: "scenarios", label: "Scenarios", detail: "Failure investigations and evidence" },
+  { key: "setup", label: "Setup", detail: "Connection help and diagrams" },
 ];
 
-const graphColumn = createColumnHelper<AlarmRecord>();
-const batchColumn = createColumnHelper<BatchRecord>();
-const findingColumn = createColumnHelper<{
-  severity: string;
-  category: string;
-  finding: string;
-  recommendation: string;
-  location?: string;
-}>();
+const opcuaTabs: Array<{ key: OpcUaWorkspace; label: string }> = [
+  { key: "discovery", label: "Discovery" },
+  { key: "browse", label: "Browse" },
+  { key: "reads", label: "Reads" },
+  { key: "translate", label: "Translate" },
+  { key: "sample", label: "Sample" },
+  { key: "monitor", label: "Monitor" },
+];
 
 const defaultDiagram = `flowchart TD
-  PumpSkid["Pump Skid"]
-  PumpSkid --> Motor["MTR-201"]
-  PumpSkid --> FlowLoop["FIC-201"]
-  FlowLoop --> Alarm["Low Flow Trip"]
+  Console["Engineering Console"]
+  Console --> Rest["DeltaV REST panels"]
+  Console --> Proxy["Same-origin MCP proxy"]
+  Proxy --> ToolRunner["MCP tools/list + tools/call"]
+  Console --> OpcUa["OPC UA workbench"]
+  OpcUa --> Browse["Browse / Read / Sample / Monitor"]
 `;
+
+const alarmColumn = createColumnHelper<AlarmRecord>();
+const batchColumn = createColumnHelper<BatchRecord>();
+const readColumn = createColumnHelper<{ nodeId: string; value: string; statusCode: string; timestamp: string }>();
+
+function safeJsonParse<T>(value: string, fallback: T): T {
+  try {
+    return JSON.parse(value) as T;
+  } catch {
+    return fallback;
+  }
+}
+
+function buildHierarchyTree(graph: GraphNode[]): HierarchyTreeNode[] {
+  const nodes = new Map<string, HierarchyTreeNode>();
+  const roots: HierarchyTreeNode[] = [];
+
+  graph.forEach((node) => {
+    nodes.set(node.id, { ...node, treeChildren: [] });
+  });
+
+  nodes.forEach((node) => {
+    const parentIds = ((node.relationships?.Parents as string[] | undefined) ?? []).filter((id) =>
+      nodes.has(id),
+    );
+
+    if (parentIds.length === 0) {
+      roots.push(node);
+      return;
+    }
+
+    parentIds.forEach((parentId) => {
+      nodes.get(parentId)?.treeChildren.push(node);
+    });
+  });
+
+  const sortTree = (items: HierarchyTreeNode[]) => {
+    items.sort((left, right) => left.path.localeCompare(right.path));
+    items.forEach((item) => sortTree(item.treeChildren));
+  };
+
+  sortTree(roots);
+  return roots;
+}
+
+function filterHierarchyTree(nodes: HierarchyTreeNode[], search: string, includeParameters: boolean): HierarchyTreeNode[] {
+  return nodes.flatMap((node) => {
+    const children = filterHierarchyTree(node.treeChildren, search, includeParameters);
+    const matchesSearch =
+      search.length === 0 ||
+      node.name.toLowerCase().includes(search) ||
+      node.id.toLowerCase().includes(search) ||
+      node.path.toLowerCase().includes(search);
+    const matchesType = includeParameters || node.type !== "Parameter";
+
+    if ((matchesSearch && matchesType) || children.length > 0) {
+      return [{ ...node, treeChildren: children }];
+    }
+
+    return [];
+  });
+}
+
+function formatRuntimeValue(value: unknown): string {
+  if (typeof value === "number") return value.toFixed(2);
+  if (typeof value === "string") return value;
+  if (typeof value === "boolean") return value ? "true" : "false";
+  if (value === null || value === undefined) return "—";
+  return JSON.stringify(value);
+}
+
+function getNodeFlags(node: GraphNode): string[] {
+  const flags: string[] = [];
+  const runtime = node.runtime ?? {};
+
+  if (typeof runtime.QUALITY === "string" && runtime.QUALITY !== "GOOD") {
+    flags.push(String(runtime.QUALITY));
+  }
+  if (typeof runtime.ALM_STATE === "string" && runtime.ALM_STATE !== "NORMAL") {
+    flags.push(String(runtime.ALM_STATE));
+  }
+  if (typeof runtime.MODE === "string" && ["MANUAL", "CAS", "HELD"].includes(String(runtime.MODE))) {
+    flags.push(String(runtime.MODE));
+  }
+
+  return flags;
+}
 
 function useChart(option: echarts.EChartsOption | null) {
   const ref = useRef<HTMLDivElement | null>(null);
@@ -175,37 +313,16 @@ function useChart(option: echarts.EChartsOption | null) {
   return ref;
 }
 
-function JsonViewer({ value }: { value: unknown }) {
-  return <pre className="json-viewer">{JSON.stringify(value, null, 2)}</pre>;
-}
-
-function CodeBlock({ value }: { value: string }) {
-  return (
-    <pre className="code-block">
-      <code>{value}</code>
-    </pre>
-  );
-}
-
-function MetricCard({ label, value, tone = "default" }: { label: string; value: string | number; tone?: "default" | "alert" | "good" }) {
-  return (
-    <div className={`metric-card metric-card--${tone}`}>
-      <div className="metric-card__label">{label}</div>
-      <div className="metric-card__value">{value}</div>
-    </div>
-  );
-}
-
 function Panel({
   title,
   subtitle,
-  children,
   actions,
+  children,
 }: {
   title: string;
   subtitle?: string;
-  children: React.ReactNode;
-  actions?: React.ReactNode;
+  actions?: ReactNode;
+  children: ReactNode;
 }) {
   return (
     <section className="panel">
@@ -218,6 +335,35 @@ function Panel({
       </div>
       <div className="panel__body">{children}</div>
     </section>
+  );
+}
+
+function MetricCard({
+  label,
+  value,
+  tone = "default",
+}: {
+  label: string;
+  value: string | number;
+  tone?: "default" | "good" | "alert";
+}) {
+  return (
+    <article className={`metric-card metric-card--${tone}`}>
+      <span className="metric-card__label">{label}</span>
+      <strong className="metric-card__value">{value}</strong>
+    </article>
+  );
+}
+
+function JsonViewer({ value }: { value: unknown }) {
+  return <pre className="json-viewer">{JSON.stringify(value, null, 2)}</pre>;
+}
+
+function CodeBlock({ value }: { value: string }) {
+  return (
+    <pre className="code-block">
+      <code>{value}</code>
+    </pre>
   );
 }
 
@@ -244,9 +390,9 @@ function DataTable<T extends object>({
     <div className="table-wrap">
       <table className="data-table">
         <thead>
-          {table.getHeaderGroups().map((group) => (
-            <tr key={group.id}>
-              {group.headers.map((header) => (
+          {table.getHeaderGroups().map((headerGroup) => (
+            <tr key={headerGroup.id}>
+              {headerGroup.headers.map((header) => (
                 <th key={header.id} onClick={header.column.getToggleSortingHandler()}>
                   {flexRender(header.column.columnDef.header, header.getContext())}
                 </th>
@@ -264,6 +410,64 @@ function DataTable<T extends object>({
           ))}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+function HierarchyTree({
+  nodes,
+  selectedId,
+  expandedIds,
+  onSelect,
+  onToggle,
+  level = 0,
+}: {
+  nodes: HierarchyTreeNode[];
+  selectedId: string | undefined;
+  expandedIds: string[];
+  onSelect: (node: GraphNode) => void;
+  onToggle: (nodeId: string) => void;
+  level?: number;
+}) {
+  return (
+    <div className="tree-list">
+      {nodes.map((node) => {
+        const isExpanded = expandedIds.includes(node.id);
+        const flags = getNodeFlags(node);
+        return (
+          <div key={node.id} className="tree-item">
+            <div
+              className={selectedId === node.id ? "tree-row tree-row--selected" : "tree-row"}
+              style={{ paddingLeft: `${10 + level * 16}px` }}
+            >
+              {node.treeChildren.length > 0 ? (
+                <button className="tree-toggle" onClick={() => onToggle(node.id)}>
+                  {isExpanded ? "−" : "+"}
+                </button>
+              ) : (
+                <span className="tree-toggle tree-toggle--empty" />
+              )}
+              <button className="tree-button" onClick={() => onSelect(node)}>
+                <span className="tree-button__title">{node.name}</span>
+                <span className="tree-button__meta">
+                  {node.type}
+                  {flags.length > 0 ? ` · ${flags.join(", ")}` : ""}
+                </span>
+              </button>
+            </div>
+            {isExpanded && node.treeChildren.length > 0 ? (
+              <HierarchyTree
+                nodes={node.treeChildren}
+                selectedId={selectedId}
+                expandedIds={expandedIds}
+                onSelect={onSelect}
+                onToggle={onToggle}
+                level={level + 1}
+              />
+            ) : null}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -289,6 +493,10 @@ async function apiFetch<T>(path: string, headers: MockHeaders, method = "GET"): 
 
   const response = await fetch(path, { method, headers: requestHeaders });
   const text = await response.text();
+  if (!response.ok) {
+    throw new Error(`${method} ${path} failed with ${response.status}: ${text}`);
+  }
+
   try {
     return JSON.parse(text) as T;
   } catch {
@@ -296,18 +504,62 @@ async function apiFetch<T>(path: string, headers: MockHeaders, method = "GET"): 
   }
 }
 
+async function mcpFetch<T>(path: string, body?: Record<string, unknown>, method = "GET"): Promise<T> {
+  const response = await fetch(path, {
+    method,
+    headers: method === "POST" ? { "content-type": "application/json" } : undefined,
+    ...(method === "POST" ? { body: JSON.stringify(body ?? {}) } : {}),
+  });
+  const text = await response.text();
+  if (!response.ok) {
+    throw new Error(`${method} ${path} failed with ${response.status}: ${text}`);
+  }
+  return JSON.parse(text) as T;
+}
+
+function getMcpTargetPaths(status: MockStatus | null, target: McpTarget) {
+  if (target === "rest") {
+    return {
+      toolsListPath: status?.mcpRestToolsListPath ?? "/api/mcp/rest/tools/list",
+      toolCallPath: status?.mcpRestToolCallPath ?? "/api/mcp/rest/tools/call",
+    };
+  }
+
+  return {
+    toolsListPath: status?.mcpOpcUaToolsListPath ?? "/api/mcp/opcua/tools/list",
+    toolCallPath: status?.mcpOpcUaToolCallPath ?? "/api/mcp/opcua/tools/call",
+  };
+}
+
+function inferTargetForTool(name: string): McpTarget {
+  return name.startsWith("opcua_") ? "opcua" : "rest";
+}
+
 function App() {
-  const [nav, setNav] = useState<NavKey>("status");
+  const [nav, setNav] = useState<NavKey>("overview");
+  const [opcuaTab, setOpcuaTab] = useState<OpcUaWorkspace>("discovery");
   const [status, setStatus] = useState<MockStatus | null>(null);
-  const [scenarios, setScenarios] = useState<Scenario[]>([]);
   const [helper, setHelper] = useState<ConnectionHelper | null>(null);
+  const [scenarios, setScenarios] = useState<Scenario[]>([]);
   const [graph, setGraph] = useState<GraphNode[]>([]);
   const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null);
+  const [expandedIds, setExpandedIds] = useState<string[]>([]);
+  const [includeParameters, setIncludeParameters] = useState(false);
+  const [hierarchySearch, setHierarchySearch] = useState("");
   const [history, setHistory] = useState<HistoryResponse | null>(null);
   const [trendPack, setTrendPack] = useState<HistoryResponse[]>([]);
   const [alarms, setAlarms] = useState<AlarmRecord[]>([]);
   const [batches, setBatches] = useState<BatchRecord[]>([]);
   const [apiResponse, setApiResponse] = useState<unknown>(null);
+  const [diagramSource, setDiagramSource] = useState(defaultDiagram);
+  const [diagramSvg, setDiagramSvg] = useState("");
+  const [bootIssues, setBootIssues] = useState<string[]>([]);
+  const [headers, setHeaders] = useState<MockHeaders>({
+    errorCode: "",
+    delayMs: "",
+    malformed: false,
+    empty: false,
+  });
   const [historyParam, setHistoryParam] = useState("PID1/PV");
   const [historyAggregation, setHistoryAggregation] = useState("Average");
   const [historyStart, setHistoryStart] = useState("2026-05-06T11:00");
@@ -328,35 +580,101 @@ function App() {
     start: "2026-05-06T11:59",
     end: "2026-05-06T14:10",
   });
-  const [headers, setHeaders] = useState<MockHeaders>({
-    errorCode: "",
-    delayMs: "",
-    malformed: false,
-    empty: false,
+  const [mcpTools, setMcpTools] = useState<McpTool[]>([]);
+  const [mcpAuthStatus, setMcpAuthStatus] = useState<Record<McpTarget, McpAuthStatus | null>>({
+    rest: null,
+    opcua: null,
   });
-  const [samplePath, setSamplePath] = useState("/health");
-  const [sampleMethod, setSampleMethod] = useState("GET");
-  const [diagramSource, setDiagramSource] = useState(defaultDiagram);
-  const [diagramSvg, setDiagramSvg] = useState("");
+  const [opcuaPresets, setOpcUaPresets] = useState<OpcUaPresetResponse | null>(null);
+  const [selectedPreset, setSelectedPreset] = useState<string>("");
+  const [toolResponse, setToolResponse] = useState<McpToolCallResponse | null>(null);
+  const [toolRunnerName, setToolRunnerName] = useState("opcua_discover_endpoints");
+  const [toolRunnerTarget, setToolRunnerTarget] = useState<McpTarget>("opcua");
+  const [toolRunnerArgs, setToolRunnerArgs] = useState("{}");
+  const [browseInput, setBrowseInput] = useState("ns=1;s=DemoDeltaV/AREA_B/REACTOR_01/TIC_301");
+  const [singleReadInput, setSingleReadInput] = useState("TIC_301/PV.CV");
+  const [multiReadInput, setMultiReadInput] = useState("TIC_301/PV.CV\nTIC_301/SP.CV\nTIC_301/OUT.CV");
+  const [translateInput, setTranslateInput] = useState("/Objects/Server");
+  const [sampleInput, setSampleInput] = useState("ns=1;s=AREA_B/REACTOR_01/TIC_301/PV.CV");
+  const [sampleStart, setSampleStart] = useState(new Date(Date.now() - 10 * 60 * 1000).toISOString().slice(0, 16));
+  const [sampleEnd, setSampleEnd] = useState(new Date().toISOString().slice(0, 16));
+  const [sampleMaxPoints, setSampleMaxPoints] = useState(16);
+  const [monitorInput, setMonitorInput] = useState("ns=1;s=AREA_B/REACTOR_01/TIC_301/PV.CV");
+  const [monitorDurationMs, setMonitorDurationMs] = useState(4000);
+  const [monitorSamplingMs, setMonitorSamplingMs] = useState(500);
 
-  useEffect(() => {
-    void Promise.all([
-      apiFetch<MockStatus>("/api/mock-ui/status", headers).then(setStatus),
-      apiFetch<{ scenarios: Scenario[] }>("/api/mock-ui/scenarios", headers).then((data) =>
-        setScenarios(data.scenarios),
-      ),
-      apiFetch<ConnectionHelper>("/api/mock-ui/connection-helper", headers).then(setHelper),
-      apiFetch<GraphResponse>("/edge/api/v1/graph", headers).then((data) => {
-        setGraph(data.results ?? []);
-        setSelectedNode((data.results ?? [])[0] ?? null);
-      }),
-    ]);
-  }, []);
+  const deferredSearch = useDeferredValue(hierarchySearch.trim().toLowerCase());
 
   useEffect(() => {
     mermaid.initialize({ startOnLoad: false, theme: "default" });
-    void mermaid.render("diagram-preview", diagramSource).then(({ svg }) => setDiagramSvg(svg));
+  }, []);
+
+  useEffect(() => {
+    void mermaid.render(`diagram-preview-${diagramSource.length}`, diagramSource).then(({ svg }) => {
+      setDiagramSvg(svg);
+    });
   }, [diagramSource]);
+
+  useEffect(() => {
+    const issues: string[] = [];
+
+    void apiFetch<MockStatus>("/api/mock-ui/status", headers)
+      .then(async (mockStatus) => {
+        setStatus(mockStatus);
+
+        const restPaths = getMcpTargetPaths(mockStatus, "rest");
+        const opcuaPaths = getMcpTargetPaths(mockStatus, "opcua");
+
+        return Promise.allSettled([
+          Promise.resolve(),
+          apiFetch<ConnectionHelper>("/api/mock-ui/connection-helper", headers).then(setHelper),
+          apiFetch<{ scenarios: Scenario[] }>("/api/mock-ui/scenarios", headers).then((payload) =>
+            setScenarios(payload.scenarios),
+          ),
+          apiFetch<GraphNode[]>("/edge/api/v1/graph", headers).then((payload) => {
+            const nodes = Array.isArray((payload as unknown as { results?: GraphNode[] }).results)
+              ? ((payload as unknown as { results: GraphNode[] }).results)
+              : (payload as unknown as GraphNode[]);
+            setGraph(nodes);
+            setSelectedNode(nodes[0] ?? null);
+          }),
+          apiFetch<OpcUaPresetResponse>("/api/mock-ui/opcua-presets", headers).then((payload) => {
+            setOpcUaPresets(payload);
+            setSelectedPreset(payload.presets[0]?.label ?? "");
+          }),
+          Promise.all([
+            mcpFetch<{ tools: McpTool[] }>(restPaths.toolsListPath),
+            mcpFetch<{ tools: McpTool[] }>(opcuaPaths.toolsListPath),
+          ]).then(([restTools, opcuaTools]) => setMcpTools([...restTools.tools, ...opcuaTools.tools])),
+          mcpFetch<McpToolCallResponse>(
+            restPaths.toolCallPath,
+            { name: "deltav_auth_status", arguments: {}, target: "rest" },
+            "POST",
+          ).then((payload) =>
+            setMcpAuthStatus((current) => ({ ...current, rest: payload.result as McpAuthStatus })),
+          ),
+          mcpFetch<McpToolCallResponse>(
+            opcuaPaths.toolCallPath,
+            { name: "deltav_auth_status", arguments: {}, target: "opcua" },
+            "POST",
+          ).then((payload) =>
+            setMcpAuthStatus((current) => ({ ...current, opcua: payload.result as McpAuthStatus })),
+          ),
+        ]);
+      })
+      .then((results) => {
+        results.forEach((result) => {
+          if (result.status === "rejected") {
+            issues.push(result.reason instanceof Error ? result.reason.message : "Unknown bootstrap error");
+          }
+        });
+        setBootIssues(issues);
+      })
+      .catch((error) => {
+        issues.push(error instanceof Error ? error.message : "Unknown bootstrap error");
+        setBootIssues(issues);
+      });
+  }, []);
 
   useEffect(() => {
     if (!selectedNode) return;
@@ -365,71 +683,128 @@ function App() {
     );
   }, [selectedNode?.id]);
 
+  useEffect(() => {
+    if (graph.length === 0) return;
+    const roots = buildHierarchyTree(graph);
+    setExpandedIds((current) => Array.from(new Set([...current, ...roots.map((node) => node.id)])));
+  }, [graph.length]);
+
+  useEffect(() => {
+    if (!opcuaPresets || !selectedPreset) return;
+    const preset = opcuaPresets.presets.find((item) => item.label === selectedPreset);
+    if (!preset) return;
+    setBrowseInput(preset.browseNodeId);
+    setSingleReadInput(preset.logicalId);
+    setMultiReadInput([preset.logicalId, preset.nodeId].join("\n"));
+    setSampleInput(preset.nodeId);
+    setMonitorInput(preset.nodeId);
+    setTranslateInput(preset.browsePath);
+    setToolRunnerArgs(
+      JSON.stringify(
+        {
+          nodeId: preset.nodeId,
+          logicalId: preset.logicalId,
+        },
+        null,
+        2,
+      ),
+    );
+  }, [opcuaPresets, selectedPreset]);
+
+  const hierarchyRoots = useMemo(() => buildHierarchyTree(graph), [graph]);
+  const filteredHierarchy = useMemo(
+    () => filterHierarchyTree(hierarchyRoots, deferredSearch, includeParameters),
+    [hierarchyRoots, deferredSearch, includeParameters],
+  );
+
   const hierarchyFlow = useMemo(() => {
-    const nodes: Node[] = graph.map((item, index) => ({
-      id: item.id,
-      data: { label: `${item.name}\n${item.type}` },
+    const visibleNodes = graph.slice(0, 24);
+    const nodes: Node[] = visibleNodes.map((node, index) => ({
+      id: node.id,
       position: {
-        x: (index % 4) * 220,
-        y: Math.floor(index / 4) * 120,
+        x: 60 + (index % 4) * 220,
+        y: 40 + Math.floor(index / 4) * 130,
+      },
+      data: {
+        label: (
+          <div className="flow-card">
+            <strong>{node.name}</strong>
+            <span>{node.type}</span>
+          </div>
+        ),
       },
       style: {
-        background: item.id === selectedNode?.id ? "#d9f7f3" : "#ffffff",
-        border: "1px solid #bdd5d1",
-        borderRadius: 14,
-        fontSize: 12,
-        width: 180,
+        width: 170,
+        padding: 0,
+        borderRadius: 18,
+        border: node.id === selectedNode?.id ? "2px solid #f38b4a" : "1px solid rgba(18,53,59,0.12)",
+        background: node.id === selectedNode?.id ? "#fff7ef" : "#ffffff",
       },
     }));
-    const edges: Edge[] = graph.flatMap((item) =>
-      ((item.relationships?.Children as string[] | undefined) ?? []).map((child) => ({
-        id: `${item.id}-${child}`,
-        source: item.id,
-        target: child,
-        animated: false,
-      })),
-    );
-    return { nodes, edges };
-  }, [graph, selectedNode]);
 
-  const relationshipFlow = useMemo(() => {
-    if (!selectedNode) return { nodes: [] as Node[], edges: [] as Edge[] };
-    const parentIds = ((selectedNode.relationships?.Parents as string[] | undefined) ?? []).slice(0, 2);
-    const childIds = ((selectedNode.relationships?.Children as string[] | undefined) ?? []).slice(0, 4);
-    const nodes: Node[] = [
-      {
-        id: selectedNode.id,
-        data: { label: selectedNode.name },
-        position: { x: 260, y: 120 },
-        style: { background: "#d9f7f3", border: "1px solid #7bb7ae", borderRadius: 14, width: 180 },
-      },
-      ...parentIds.map((parentId, index) => ({
-        id: `parent-${parentId}`,
-        data: { label: parentId },
-        position: { x: 40 + index * 220, y: 20 },
-        style: { background: "#fff", border: "1px solid #c9d8d5", borderRadius: 14, width: 180 },
-      })),
-      ...childIds.map((childId, index) => ({
-        id: `child-${childId}`,
-        data: { label: childId },
-        position: { x: 40 + index * 180, y: 250 },
-        style: { background: "#fff", border: "1px solid #c9d8d5", borderRadius: 14, width: 160 },
-      })),
-    ];
-    const edges: Edge[] = [
-      ...parentIds.map((parentId) => ({
-        id: `${parentId}-to-${selectedNode.id}`,
-        source: `parent-${parentId}`,
-        target: selectedNode.id,
-      })),
-      ...childIds.map((childId) => ({
-        id: `${selectedNode.id}-to-${childId}`,
-        source: selectedNode.id,
-        target: `child-${childId}`,
-      })),
-    ];
+    const edges: Edge[] = [];
+    visibleNodes.forEach((node) => {
+      (((node.relationships?.Children as string[] | undefined) ?? [])).forEach((child) => {
+        if (visibleNodes.some((candidate) => candidate.id === child)) {
+          edges.push({
+            id: `${node.id}-${child}`,
+            source: node.id,
+            target: child,
+            animated: child === selectedNode?.id,
+            style: { stroke: child === selectedNode?.id ? "#f38b4a" : "#9ab7b2" },
+          });
+        }
+      });
+    });
+
     return { nodes, edges };
-  }, [selectedNode]);
+  }, [graph, selectedNode?.id]);
+
+  const selectedRelationships = useMemo(() => {
+    if (!selectedNode) return { nodes: [], edges: [] } as { nodes: Node[]; edges: Edge[] };
+    const ids = new Set<string>([
+      selectedNode.id,
+      ...(((selectedNode.relationships?.Parents as string[] | undefined) ?? [])),
+      ...(((selectedNode.relationships?.Children as string[] | undefined) ?? [])),
+    ]);
+    const related = graph.filter((node) => ids.has(node.id));
+
+    return {
+      nodes: related.map((node, index) => ({
+        id: node.id,
+        position: { x: 40 + index * 180, y: node.id === selectedNode.id ? 40 : 220 },
+        data: {
+          label: (
+            <div className="flow-card">
+              <strong>{node.name}</strong>
+              <span>{node.type}</span>
+            </div>
+          ),
+        },
+        style: {
+          width: 160,
+          padding: 0,
+          borderRadius: 18,
+          border: node.id === selectedNode.id ? "2px solid #177f7a" : "1px solid rgba(18,53,59,0.12)",
+          background: node.id === selectedNode.id ? "#e9fbf8" : "#ffffff",
+        },
+      })),
+      edges: [
+        ...((((selectedNode.relationships?.Parents as string[] | undefined) ?? [])).map((parentId) => ({
+          id: `${parentId}-${selectedNode.id}`,
+          source: parentId,
+          target: selectedNode.id,
+          style: { stroke: "#177f7a" },
+        }))),
+        ...((((selectedNode.relationships?.Children as string[] | undefined) ?? [])).map((childId) => ({
+          id: `${selectedNode.id}-${childId}`,
+          source: selectedNode.id,
+          target: childId,
+          style: { stroke: "#f0b24b" },
+        }))),
+      ],
+    };
+  }, [graph, selectedNode]);
 
   const historyChartRef = useChart(
     history
@@ -444,8 +819,9 @@ function App() {
             {
               type: "line",
               smooth: true,
-              areaStyle: { opacity: 0.15 },
               data: history.values.map((value) => value.value),
+              lineStyle: { color: "#177f7a", width: 3 },
+              areaStyle: { color: "rgba(23,127,122,0.12)" },
             },
           ],
         }
@@ -456,37 +832,45 @@ function App() {
     trendPack.length > 0
       ? {
           tooltip: { trigger: "axis" },
-          legend: { top: 0 },
+          legend: {
+            top: 0,
+            textStyle: { color: "#577277" },
+          },
           xAxis: {
             type: "category",
             data: trendPack[0]?.values.map((value) => value.timestamp.slice(11, 16)) ?? [],
           },
           yAxis: { type: "value" },
-          series: trendPack.map((series) => ({
-            type: "line",
+          series: trendPack.map((series, index) => ({
             name: series.entityId,
+            type: "line",
             smooth: true,
             data: series.values.map((value) => value.value),
+            lineStyle: {
+              width: 2,
+              color: ["#177f7a", "#f38b4a", "#538fcf", "#2f8f65"][index % 4],
+            },
           })),
         }
       : null,
   );
 
-  const alarmChartRef = useChart(
+  const eventChartRef = useChart(
     alarms.length > 0
       ? {
           tooltip: { trigger: "item" },
+          xAxis: {
+            type: "category",
+            data: Array.from(new Set(alarms.map((item) => item.priority ?? "UNSPECIFIED"))),
+          },
+          yAxis: { type: "value" },
           series: [
             {
-              type: "pie",
-              radius: ["42%", "70%"],
-              data: Array.from(
-                alarms.reduce((map, item) => {
-                  const key = item.priority ?? "UNSPECIFIED";
-                  map.set(key, (map.get(key) ?? 0) + 1);
-                  return map;
-                }, new Map<string, number>()),
-              ).map(([name, value]) => ({ name, value })),
+              type: "bar",
+              data: Array.from(new Set(alarms.map((item) => item.priority ?? "UNSPECIFIED"))).map(
+                (priority) => alarms.filter((item) => (item.priority ?? "UNSPECIFIED") === priority).length,
+              ),
+              itemStyle: { color: "#d96b3b" },
             },
           ],
         }
@@ -505,10 +889,55 @@ function App() {
           series: [
             {
               type: "bar",
-              name: "Events",
               data: Array.from(new Set(batches.map((item) => item.batchId))).map(
                 (batchId) => batches.filter((item) => item.batchId === batchId).length,
               ),
+              itemStyle: { color: "#538fcf" },
+            },
+          ],
+        }
+      : null,
+  );
+
+  const toolSeries = useMemo(() => {
+    const result = toolResponse?.result as
+      | { samples?: Array<{ timestamp: string; reads: Array<{ value: number | null; sourceTimestamp?: string }> }> }
+      | { events?: Array<{ timestamp: string; value: number | null }> }
+      | undefined;
+
+    if (result?.samples && result.samples.length > 0) {
+      return result.samples.map((sample) => ({
+        timestamp: sample.timestamp,
+        value: typeof sample.reads[0]?.value === "number" ? sample.reads[0]?.value : null,
+      }));
+    }
+
+    if (result?.events && result.events.length > 0) {
+      return result.events.map((event) => ({
+        timestamp: event.timestamp,
+        value: typeof event.value === "number" ? event.value : null,
+      }));
+    }
+
+    return [];
+  }, [toolResponse]);
+
+  const opcuaChartRef = useChart(
+    toolSeries.length > 0
+      ? {
+          tooltip: { trigger: "axis" },
+          xAxis: {
+            type: "category",
+            data: toolSeries.map((item) => item.timestamp.slice(11, 19)),
+          },
+          yAxis: { type: "value" },
+          series: [
+            {
+              type: "line",
+              smooth: true,
+              data: toolSeries.map((item) => item.value),
+              lineStyle: { color: "#6b5cff", width: 3 },
+              areaStyle: { color: "rgba(107,92,255,0.12)" },
             },
           ],
         }
@@ -517,15 +946,13 @@ function App() {
 
   const alarmColumns = useMemo(
     () => [
-      graphColumn.accessor("timestamp", { header: "Timestamp" }),
-      graphColumn.accessor((row) => row.module ?? row.entityId ?? "-", {
-        id: "module",
-        header: "Module",
-      }),
-      graphColumn.accessor((row) => row.priority ?? "-", { id: "priority", header: "Priority" }),
-      graphColumn.accessor((row) => row.eventType ?? "-", { id: "eventType", header: "Type" }),
-      graphColumn.accessor("message", { header: "Message" }),
-      graphColumn.accessor((row) => row.state ?? "-", { id: "state", header: "State" }),
+      alarmColumn.accessor("timestamp", { header: "Timestamp" }),
+      alarmColumn.accessor("area", { header: "Area" }),
+      alarmColumn.accessor("module", { header: "Module" }),
+      alarmColumn.accessor("priority", { header: "Priority" }),
+      alarmColumn.accessor("eventType", { header: "Type" }),
+      alarmColumn.accessor("message", { header: "Message" }),
+      alarmColumn.accessor("state", { header: "State" }),
     ],
     [],
   );
@@ -535,440 +962,767 @@ function App() {
       batchColumn.accessor("timestamp", { header: "Timestamp" }),
       batchColumn.accessor("batchId", { header: "Batch ID" }),
       batchColumn.accessor("recipe", { header: "Recipe" }),
-      batchColumn.accessor("unit", { header: "Unit" }),
       batchColumn.accessor("phase", { header: "Phase" }),
-      batchColumn.accessor("eventType", { header: "Event" }),
       batchColumn.accessor("status", { header: "Status" }),
       batchColumn.accessor("message", { header: "Message" }),
     ],
     [],
   );
 
-  const findingColumns = useMemo(
+  const readTableRows = useMemo(() => {
+    if (!toolResponse || typeof toolResponse.result !== "object" || toolResponse.result === null) {
+      return [] as Array<{ nodeId: string; value: string; statusCode: string; timestamp: string }>;
+    }
+
+    const result = toolResponse.result as Record<string, unknown>;
+    const reads =
+      Array.isArray(result.reads)
+        ? result.reads
+        : Array.isArray(result.references)
+          ? []
+          : "nodeId" in result
+            ? [result]
+            : [];
+
+    return reads
+      .filter((item): item is Record<string, unknown> => typeof item === "object" && item !== null)
+      .map((item) => ({
+        nodeId: typeof item.nodeId === "string" ? item.nodeId : "—",
+        value: formatRuntimeValue(item.value),
+        statusCode: typeof item.statusCode === "string" ? item.statusCode : "—",
+        timestamp:
+          typeof item.sourceTimestamp === "string"
+            ? item.sourceTimestamp
+            : typeof item.serverTimestamp === "string"
+              ? item.serverTimestamp
+              : "—",
+      }));
+  }, [toolResponse]);
+
+  const readColumns = useMemo(
     () => [
-      findingColumn.accessor("severity", { header: "Severity" }),
-      findingColumn.accessor("category", { header: "Category" }),
-      findingColumn.accessor("finding", { header: "Finding" }),
-      findingColumn.accessor("recommendation", { header: "Recommendation" }),
-      findingColumn.accessor((row) => row.location ?? "-", { id: "location", header: "Location" }),
+      readColumn.accessor("nodeId", { header: "Node ID" }),
+      readColumn.accessor("value", { header: "Value" }),
+      readColumn.accessor("statusCode", { header: "Status" }),
+      readColumn.accessor("timestamp", { header: "Timestamp" }),
     ],
     [],
   );
 
-  const validationFindings = useMemo(
-    () => [
-      {
-        severity: "warning",
-        category: "operator_actions",
-        finding: "Operator action for low-flow trip requires clearer escalation guidance.",
-        recommendation: "Add who responds and when to escalate to maintenance.",
-        location: "alarm_list.json:FIC-201",
-      },
-      {
-        severity: "error",
-        category: "reset",
-        finding: "Interlock reset behavior is not fully defined for held phase recovery.",
-        recommendation: "Document reviewed reset sequence before release.",
-        location: "interlock_matrix.json:PHASE_HEATUP",
-      },
-    ],
-    [],
+  const groupedTools = useMemo(() => {
+    const groups = new Map<string, McpTool[]>();
+    mcpTools.forEach((tool) => {
+      const group = tool.name.startsWith("opcua_")
+        ? "OPC UA"
+        : tool.name.startsWith("deltav_")
+          ? "DeltaV"
+          : tool.name.startsWith("generate_")
+            ? "Generation"
+            : tool.name.startsWith("review_") || tool.name.startsWith("identify_")
+              ? "Review"
+              : "Other";
+      const key = `${group} · ${tool.target.toUpperCase()}`;
+      groups.set(key, [...(groups.get(key) ?? []), tool]);
+    });
+    return Array.from(groups.entries());
+  }, [mcpTools]);
+
+  const selectedTool = useMemo(
+    () => mcpTools.find((tool) => tool.name === toolRunnerName && tool.target === toolRunnerTarget) ?? null,
+    [mcpTools, toolRunnerName, toolRunnerTarget],
   );
-
-  const sampleCurl = useMemo(() => {
-    const headersPart = [
-      headers.errorCode ? `-H "x-mock-error: ${headers.errorCode}"` : "",
-      headers.delayMs ? `-H "x-mock-delay-ms: ${headers.delayMs}"` : "",
-      headers.malformed ? `-H "x-mock-malformed: true"` : "",
-      headers.empty ? `-H "x-mock-empty: true"` : "",
-    ]
-      .filter(Boolean)
-      .join(" ");
-    return `curl -X ${sampleMethod} http://localhost:8080${samplePath} ${headersPart}`.trim();
-  }, [headers, sampleMethod, samplePath]);
-
-  async function runApiSample() {
-    const result = await apiFetch<unknown>(samplePath, headers, sampleMethod);
-    setApiResponse(result);
-  }
 
   async function loadHistory() {
-    const result = await apiFetch<HistoryResponse>(
+    const response = await apiFetch<HistoryResponse>(
       `/edge/api/v1/history/${encodeURIComponent(historyParam)}?StartTime=${new Date(historyStart).toISOString()}&EndTime=${new Date(historyEnd).toISOString()}&PS=32&Aggregation=${historyAggregation}`,
       headers,
     );
-    setHistory(result);
+    setHistory(response);
+    setApiResponse(response);
   }
 
   async function loadTrendPack() {
-    const ids = ["PID1/PV", "PID1/OUT", "TIC-301/PV"];
-    const results = await Promise.all(
-      ids.map((id) =>
+    const parameters = ["PID1/PV", "PID1/SP", "PID1/OUT"];
+    const series = await Promise.all(
+      parameters.map((id) =>
         apiFetch<HistoryResponse>(
           `/edge/api/v1/history/${encodeURIComponent(id)}?StartTime=${new Date(historyStart).toISOString()}&EndTime=${new Date(historyEnd).toISOString()}&PS=24&Aggregation=Average`,
           headers,
         ),
       ),
     );
-    setTrendPack(results);
+    setTrendPack(series);
+    setApiResponse(series);
   }
 
   async function loadAlarms() {
     const query = new URLSearchParams({
       StartTime: new Date(alarmFilters.start).toISOString(),
       EndTime: new Date(alarmFilters.end).toISOString(),
-      PS: "100",
       PN: "1",
+      PS: "100",
     });
     if (alarmFilters.area) query.set("area", alarmFilters.area);
     if (alarmFilters.module) query.set("module", alarmFilters.module);
     if (alarmFilters.priority) query.set("priority", alarmFilters.priority);
     if (alarmFilters.eventType) query.set("eventType", alarmFilters.eventType);
-    const response = await apiFetch<AlarmResponse>(`/edge/api/v1/ae?${query.toString()}`, headers);
+    const response = await apiFetch<{ records: AlarmRecord[] }>(`/edge/api/v1/ae?${query.toString()}`, headers);
     setAlarms(response.records);
+    setApiResponse(response);
   }
 
   async function loadBatches() {
     const query = new URLSearchParams({
       StartTime: new Date(batchFilters.start).toISOString(),
       EndTime: new Date(batchFilters.end).toISOString(),
-      PS: "100",
       PN: "1",
+      PS: "100",
     });
     if (batchFilters.batchId) query.set("batchId", batchFilters.batchId);
     if (batchFilters.recipe) query.set("recipe", batchFilters.recipe);
     if (batchFilters.unit) query.set("unit", batchFilters.unit);
     if (batchFilters.phase) query.set("phase", batchFilters.phase);
-    const response = await apiFetch<BatchResponse>(
-      `/edge/api/v1/batchevent?${query.toString()}`,
-      headers,
-    );
+    const response = await apiFetch<{ records: BatchRecord[] }>(`/edge/api/v1/batchevent?${query.toString()}`, headers);
     setBatches(response.records);
+    setApiResponse(response);
   }
 
-  useEffect(() => {
-    void loadHistory();
-    void loadTrendPack();
-    void loadAlarms();
-    void loadBatches();
-  }, []);
+  async function runTool(name: string, args: Record<string, unknown>, target?: McpTarget) {
+    const resolvedTarget = target ?? inferTargetForTool(name);
+    const { toolCallPath } = getMcpTargetPaths(status, resolvedTarget);
+    const response = await mcpFetch<McpToolCallResponse>(
+      toolCallPath,
+      { name, arguments: args, target: resolvedTarget },
+      "POST",
+    );
+    setToolResponse(response);
+    return response;
+  }
+
+  async function runDiscovery(action: "endpoints" | "connection" | "namespaces" | "status") {
+    const mapping: Record<typeof action, string> = {
+      endpoints: "opcua_discover_endpoints",
+      connection: "opcua_test_connection",
+      namespaces: "opcua_get_namespace_array",
+      status: "opcua_get_server_status",
+    };
+    await runTool(mapping[action], {}, "opcua");
+  }
+
+  async function runBrowse() {
+    await runTool("opcua_browse_node", { nodeId: browseInput }, "opcua");
+  }
+
+  async function runSingleRead() {
+    await runTool(
+      "opcua_read_node",
+      {
+        nodeId: singleReadInput,
+        ...(singleReadInput.includes("ns=") ? {} : { logicalId: singleReadInput }),
+      },
+      "opcua",
+    );
+  }
+
+  async function runMultiRead() {
+    const nodeIds = multiReadInput
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0);
+    await runTool("opcua_read_nodes", { nodeIds }, "opcua");
+  }
+
+  async function runTranslate() {
+    await runTool("opcua_translate_path", {
+      browsePath: translateInput,
+      startingNodeId: "RootFolder",
+    }, "opcua");
+  }
+
+  async function runSample() {
+    const nodeIds = sampleInput
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0);
+    await runTool("opcua_sample_nodes_for_window", {
+      nodeIds,
+      startTime: new Date(sampleStart).toISOString(),
+      endTime: new Date(sampleEnd).toISOString(),
+      maxPoints: sampleMaxPoints,
+    }, "opcua");
+  }
+
+  async function runMonitor() {
+    const nodeIds = monitorInput
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0);
+    await runTool("opcua_monitor_nodes_for_window", {
+      nodeIds,
+      durationMs: monitorDurationMs,
+      samplingIntervalMs: monitorSamplingMs,
+    }, "opcua");
+  }
+
+  async function runToolRunner() {
+    const parsed = safeJsonParse<Record<string, unknown>>(toolRunnerArgs, {});
+    await runTool(toolRunnerName, parsed, toolRunnerTarget);
+  }
 
   return (
-    <div className="app-shell">
-      <aside className="sidebar">
-        <div className="sidebar__brand">
-          <div className="sidebar__eyebrow">Development Only</div>
-          <h1>Mock DeltaV Edge</h1>
-          <p>Engineering test bench for the simulated API.</p>
+    <div className="console-shell">
+      <aside className="console-sidebar">
+        <div>
+          <span className="console-sidebar__eyebrow">DeltaV Engineering Console</span>
+          <h1>Mock Edge + OPC UA Workbench</h1>
+          <p>One browser console for mock REST, live MCP tools, and read-only OPC UA investigation workflows.</p>
         </div>
-        <nav className="sidebar__nav">
+
+        <div className="console-sidebar__status">
+          <span className="status-dot status-dot--good" />
+          <div>
+            <strong>{status?.status ?? "loading"}</strong>
+            <span>
+              {mcpAuthStatus.rest?.dataSource && mcpAuthStatus.opcua?.dataSource
+                ? `REST ${mcpAuthStatus.rest.dataSource} · OPC UA ${mcpAuthStatus.opcua.dataSource}`
+                : "Dual MCP status pending"}
+            </span>
+          </div>
+        </div>
+
+        <nav className="console-nav">
           {navItems.map((item) => (
             <button
               key={item.key}
-              className={nav === item.key ? "nav-button nav-button--active" : "nav-button"}
+              className={nav === item.key ? "console-nav__button console-nav__button--active" : "console-nav__button"}
               onClick={() => setNav(item.key)}
             >
-              {item.label}
+              <span>{item.label}</span>
+              <small>{item.detail}</small>
             </button>
           ))}
         </nav>
-        <div className="sidebar__footer">
-          <span>Base URL</span>
-          <strong>{status?.baseUrl ?? "loading..."}</strong>
+
+        <div className="console-sidebar__footer">
+          <span>Mock REST: {status?.baseUrl ?? "…"}</span>
+          <span>Mock OPC UA: {status?.mockOpcUaEndpoint ?? opcuaPresets?.endpoint ?? "…"}</span>
+          <span>REST MCP: {status?.mcpRestToolCallPath ?? "/api/mcp/rest/tools/call"}</span>
+          <span>OPC UA MCP: {status?.mcpOpcUaToolCallPath ?? "/api/mcp/opcua/tools/call"}</span>
         </div>
       </aside>
-      <main className="content">
-        <header className="content__header">
+
+      <main className="console-main">
+        <header className="console-header">
           <div>
-            <p className="content__kicker">Mock API Web UI</p>
+            <p className="console-header__kicker">{navItems.find((item) => item.key === nav)?.detail}</p>
             <h2>{navItems.find((item) => item.key === nav)?.label}</h2>
           </div>
-          <div className="header-badges">
-            <span className="pill">Auth {status?.authEnabled ? "Enabled" : "Off"}</span>
-            <span className="pill">Mode {status?.mockMode ?? "..."}</span>
+          <div className="console-badges">
+            <span className="console-pill">UI origin `:8080`</span>
+            <span className="console-pill">MCP over same-origin proxy</span>
+            <span className="console-pill">Read-only safety model</span>
           </div>
         </header>
 
-        {nav === "status" && status ? (
+        {bootIssues.length > 0 ? (
+          <section className="console-alert">
+            <strong>Bootstrap warnings</strong>
+            <ul>
+              {bootIssues.map((issue) => (
+                <li key={issue}>{issue}</li>
+              ))}
+            </ul>
+          </section>
+        ) : null}
+
+        {nav === "overview" ? (
           <div className="page-grid">
-            <Panel title="Mock API Status" subtitle="Confirm the mock service, base URL, and demo landscape.">
+            <Panel title="System posture" subtitle="Status and quick context for the integrated engineering console.">
               <div className="metrics-row">
-                <MetricCard label="UI Status" value={status.status} tone="good" />
-                <MetricCard label="Base URL" value={status.baseUrl} />
-                <MetricCard label="Health Endpoint" value={status.healthEndpoint} />
-                <MetricCard label="Demo Systems" value={status.systems.length} />
+                <MetricCard label="Demo systems" value={status?.systems.length ?? 0} />
+                <MetricCard label="Hierarchy nodes" value={graph.length} />
+                <MetricCard label="MCP tools" value={mcpTools.length} tone="good" />
+                <MetricCard label="REST MCP" value={mcpAuthStatus.rest?.authenticated ? "online" : "pending"} />
+                <MetricCard label="OPC UA MCP" value={mcpAuthStatus.opcua?.authenticated ? "online" : "pending"} />
+                <MetricCard label="OPC UA presets" value={opcuaPresets?.presets.length ?? 0} />
               </div>
               <div className="detail-grid">
-                <div>
-                  <h3>Available Demo Systems</h3>
-                  <ul className="bulleted-list">
-                    {status.systems.map((system) => (
-                      <li key={system.name}>
-                        <strong>{system.name}</strong>
-                        <span>{system.summary}</span>
-                      </li>
+                <article className="detail-card">
+                  <h3>REST MCP status</h3>
+                  <JsonViewer value={mcpAuthStatus.rest} />
+                </article>
+                <article className="detail-card">
+                  <h3>OPC UA MCP status</h3>
+                  <JsonViewer value={mcpAuthStatus.opcua} />
+                </article>
+                <article className="detail-card">
+                  <h3>Console workspaces</h3>
+                  <ul className="detail-list">
+                    {(status?.workspaces ?? []).map((workspace) => (
+                      <li key={workspace}>{workspace}</li>
                     ))}
                   </ul>
-                </div>
-                <div>
-                  <h3>Available Endpoints</h3>
-                  <ul className="endpoint-list">
-                    {status.endpoints.map((endpoint) => (
-                      <li key={endpoint}>{endpoint}</li>
-                    ))}
-                  </ul>
-                </div>
+                </article>
+                <article className="detail-card">
+                  <h3>Quick launch</h3>
+                  <div className="button-row">
+                    <button className="primary-button" onClick={() => setNav("opcua")}>Open OPC UA</button>
+                    <button className="ghost-button" onClick={() => setNav("runner")}>Open Tool Runner</button>
+                    <button className="ghost-button" onClick={() => setNav("deltaV")}>Open DeltaV Graph</button>
+                  </div>
+                </article>
               </div>
             </Panel>
-            <Panel title="Hierarchy Graph" subtitle="System to parameter relationships used by the UI and MCP server.">
-              <div className="canvas-panel">
-                <ReactFlow
-                  nodes={hierarchyFlow.nodes}
-                  edges={hierarchyFlow.edges}
-                  fitView
-                  onNodeClick={(_, node) => {
-                    const match = graph.find((item) => item.id === node.id);
-                    if (match) setSelectedNode(match);
-                  }}
-                >
-                  <Background />
-                  <MiniMap />
-                  <Controls />
-                </ReactFlow>
-              </div>
-            </Panel>
-          </div>
-        ) : null}
 
-        {nav === "explorer" ? (
-          <div className="page-grid">
-            <Panel
-              title="API Explorer"
-              subtitle="Run sample requests from the browser and inspect formatted responses."
-              actions={<button className="primary-button" onClick={runApiSample}>Run Request</button>}
-            >
-              <div className="form-grid">
-                <label>
-                  Method
-                  <select value={sampleMethod} onChange={(event) => setSampleMethod(event.target.value)}>
-                    <option>GET</option>
-                    <option>POST</option>
-                  </select>
-                </label>
-                <label className="form-grid__wide">
-                  Path
-                  <select value={samplePath} onChange={(event) => setSamplePath(event.target.value)}>
-                    <option value="/health">/health</option>
-                    <option value="/api/mock-ui/status">/api/mock-ui/status</option>
-                    <option value="/edge/api/v1/graph">/edge/api/v1/graph</option>
-                    <option value="/edge/api/v1/graph/PID-101?p=1&r=1">/edge/api/v1/graph/PID-101?p=1&r=1</option>
-                    <option value="/edge/api/v1/history/PID1%2FPV?StartTime=2026-05-06T11:00:00.000Z&EndTime=2026-05-06T12:00:00.000Z&PS=16&Aggregation=Average">History sample</option>
-                    <option value="/edge/api/v1/ae?area=AREA_A&PS=10&PN=1">Alarms sample</option>
-                    <option value="/edge/api/v1/batchevent?recipe=RECIPE_A&PS=10&PN=1">Batch sample</option>
-                  </select>
-                </label>
-              </div>
-              <h3>cURL Example</h3>
-              <CodeBlock value={sampleCurl} />
-              <button className="ghost-button" onClick={() => navigator.clipboard.writeText(sampleCurl)}>
-                Copy cURL
-              </button>
-            </Panel>
-            <Panel title="Response" subtitle="Formatted JSON response from the selected endpoint.">
-              <JsonViewer value={apiResponse ?? { note: "Run a sample request." }} />
-            </Panel>
-          </div>
-        ) : null}
-
-        {nav === "hierarchy" ? (
-          <div className="page-grid">
-            <Panel title="Hierarchy Browser" subtitle="Browse system, area, unit, module, and parameter relationships.">
-              <div className="canvas-panel canvas-panel--large">
-                <ReactFlow
-                  nodes={hierarchyFlow.nodes}
-                  edges={hierarchyFlow.edges}
-                  fitView
-                  onNodeClick={(_, node) => {
-                    const match = graph.find((item) => item.id === node.id);
-                    if (match) setSelectedNode(match);
-                  }}
-                >
-                  <Background />
-                  <MiniMap />
-                  <Controls />
-                </ReactFlow>
-              </div>
-            </Panel>
-            <Panel title="Node Detail" subtitle="Inspect selected mock entity metadata, runtime values, and relationships.">
-              {selectedNode ? <JsonViewer value={selectedNode} /> : <p>Select a node.</p>}
-            </Panel>
-            <Panel title="Module Relationship View" subtitle="Selected module with parents and children using React Flow.">
-              <div className="canvas-panel">
-                <ReactFlow nodes={relationshipFlow.nodes} edges={relationshipFlow.edges} fitView>
-                  <Background />
-                  <Controls />
-                </ReactFlow>
-              </div>
-            </Panel>
-          </div>
-        ) : null}
-
-        {nav === "history" ? (
-          <div className="page-grid">
-            <Panel title="History Viewer" subtitle="Query deterministic mock history and aggregation behavior." actions={<button className="primary-button" onClick={loadHistory}>Load History</button>}>
-              <div className="form-grid">
-                <label>
-                  Parameter
-                  <select value={historyParam} onChange={(event) => setHistoryParam(event.target.value)}>
-                    <option value="PID1/PV">PID1/PV</option>
-                    <option value="PID1/OUT">PID1/OUT</option>
-                    <option value="FIC-201/PV">FIC-201/PV</option>
-                    <option value="TIC-301/PV">TIC-301/PV</option>
-                  </select>
-                </label>
-                <label>
-                  StartTime
-                  <input type="datetime-local" value={historyStart} onChange={(event) => setHistoryStart(event.target.value)} />
-                </label>
-                <label>
-                  EndTime
-                  <input type="datetime-local" value={historyEnd} onChange={(event) => setHistoryEnd(event.target.value)} />
-                </label>
-                <label>
-                  Aggregation
-                  <select value={historyAggregation} onChange={(event) => setHistoryAggregation(event.target.value)}>
-                    {["Average", "Minimum", "Maximum", "Count", "Start", "End", "Range", "Interpolative"].map((value) => (
-                      <option key={value}>{value}</option>
-                    ))}
-                  </select>
-                </label>
-              </div>
-              <div ref={historyChartRef} className="chart-panel" />
-              <JsonViewer value={history} />
-            </Panel>
-            <Panel title="Trend Pack Viewer" subtitle="Multiple related traces for abnormal-event investigation." actions={<button className="ghost-button" onClick={loadTrendPack}>Load Trend Pack</button>}>
-              <div ref={trendPackChartRef} className="chart-panel" />
-              <div className="metrics-row">
-                {trendPack.map((series) => (
-                  <MetricCard
-                    key={series.entityId}
-                    label={series.entityId}
-                    value={series.values.filter((point) => point.quality === "GOOD").length}
-                  />
+            <Panel title="Available endpoints" subtitle="Mock REST plus same-origin proxy surfaces exposed by this console.">
+              <div className="endpoint-grid">
+                {(status?.endpoints ?? []).map((endpoint) => (
+                  <code key={endpoint} className="endpoint-chip">{endpoint}</code>
                 ))}
               </div>
             </Panel>
           </div>
         ) : null}
 
-        {nav === "alarms" ? (
+        {nav === "deltaV" ? (
           <div className="page-grid">
-            <Panel title="Alarms & Events Viewer" subtitle="Filter and inspect mock alarm/event records." actions={<button className="primary-button" onClick={loadAlarms}>Load Records</button>}>
-              <div className="form-grid">
-                <label>
-                  Area
-                  <input value={alarmFilters.area} onChange={(event) => setAlarmFilters({ ...alarmFilters, area: event.target.value })} />
+            <Panel
+              title="DeltaV hierarchy workspace"
+              subtitle="Browse the mock DeltaV hierarchy, runtime flags, and selected-node relationships."
+              actions={
+                <label className="checkbox">
+                  <input
+                    type="checkbox"
+                    checked={includeParameters}
+                    onChange={(event) => setIncludeParameters(event.target.checked)}
+                  />
+                  Include parameters
                 </label>
-                <label>
-                  Module
-                  <input value={alarmFilters.module} onChange={(event) => setAlarmFilters({ ...alarmFilters, module: event.target.value })} />
-                </label>
-                <label>
-                  Priority
-                  <input value={alarmFilters.priority} onChange={(event) => setAlarmFilters({ ...alarmFilters, priority: event.target.value })} />
-                </label>
-                <label>
-                  Event Type
-                  <input value={alarmFilters.eventType} onChange={(event) => setAlarmFilters({ ...alarmFilters, eventType: event.target.value })} />
-                </label>
-                <label>
-                  StartTime
-                  <input type="datetime-local" value={alarmFilters.start} onChange={(event) => setAlarmFilters({ ...alarmFilters, start: event.target.value })} />
-                </label>
-                <label>
-                  EndTime
-                  <input type="datetime-local" value={alarmFilters.end} onChange={(event) => setAlarmFilters({ ...alarmFilters, end: event.target.value })} />
+              }
+            >
+              <div className="hierarchy-toolbar">
+                <label className="form-field">
+                  <span>Search hierarchy</span>
+                  <input
+                    value={hierarchySearch}
+                    onChange={(event) => setHierarchySearch(event.target.value)}
+                    placeholder="Search by id, name, or path"
+                  />
                 </label>
               </div>
-              <DataTable
-                data={alarms}
-                columns={alarmColumns}
-                rowClassName={(row) =>
-                  [row.active ? "row--active" : "", row.acknowledged ? "row--ack" : "", /trip|interlock/i.test(row.message) ? "row--trip" : ""]
-                    .filter(Boolean)
-                    .join(" ")
-                }
-              />
-            </Panel>
-            <Panel title="Alarm Analytics" subtitle="Priority distribution and nuisance-oriented visual context.">
-              <div ref={alarmChartRef} className="chart-panel" />
-              <div className="metrics-row">
-                <MetricCard label="Active" value={alarms.filter((item) => item.active).length} tone="alert" />
-                <MetricCard label="Acknowledged" value={alarms.filter((item) => item.acknowledged).length} />
-                <MetricCard label="Return to Normal" value={alarms.filter((item) => item.returnToNormalTime).length} tone="good" />
+              <div className="workspace-grid workspace-grid--deltaV">
+                <div className="workspace-grid__rail">
+                  <HierarchyTree
+                    nodes={filteredHierarchy}
+                    selectedId={selectedNode?.id}
+                    expandedIds={expandedIds}
+                    onSelect={setSelectedNode}
+                    onToggle={(nodeId) =>
+                      setExpandedIds((current) =>
+                        current.includes(nodeId) ? current.filter((item) => item !== nodeId) : [...current, nodeId],
+                      )
+                    }
+                  />
+                </div>
+                <div className="workspace-grid__main">
+                  <div className="canvas-card">
+                    <ReactFlow nodes={hierarchyFlow.nodes} edges={hierarchyFlow.edges} fitView>
+                      <MiniMap />
+                      <Controls />
+                      <Background />
+                    </ReactFlow>
+                  </div>
+                  <div className="detail-grid">
+                    <article className="detail-card">
+                      <h3>Selected node</h3>
+                      <JsonViewer value={selectedNode} />
+                    </article>
+                    <article className="detail-card">
+                      <h3>Relationship view</h3>
+                      <div className="mini-flow">
+                        <ReactFlow nodes={selectedRelationships.nodes} edges={selectedRelationships.edges} fitView>
+                          <Background />
+                        </ReactFlow>
+                      </div>
+                    </article>
+                  </div>
+                </div>
               </div>
             </Panel>
           </div>
         ) : null}
 
-        {nav === "batch" ? (
+        {nav === "trends" ? (
           <div className="page-grid">
-            <Panel title="Batch Event Viewer" subtitle="Filter and inspect mock batch timelines." actions={<button className="primary-button" onClick={loadBatches}>Load Batch Events</button>}>
+            <Panel
+              title="Trend workspace"
+              subtitle="Query deterministic mock history and compare related traces."
+              actions={
+                <div className="button-row">
+                  <button className="primary-button" onClick={loadHistory}>Load history</button>
+                  <button className="ghost-button" onClick={loadTrendPack}>Load trend pack</button>
+                </div>
+              }
+            >
               <div className="form-grid">
-                <label>
-                  Batch ID
+                <label className="form-field">
+                  <span>Parameter</span>
+                  <select value={historyParam} onChange={(event) => setHistoryParam(event.target.value)}>
+                    <option value="PID1/PV">PID1/PV</option>
+                    <option value="PID1/SP">PID1/SP</option>
+                    <option value="PID1/OUT">PID1/OUT</option>
+                    <option value="TIC301/PV">TIC301/PV</option>
+                  </select>
+                </label>
+                <label className="form-field">
+                  <span>Start</span>
+                  <input type="datetime-local" value={historyStart} onChange={(event) => setHistoryStart(event.target.value)} />
+                </label>
+                <label className="form-field">
+                  <span>End</span>
+                  <input type="datetime-local" value={historyEnd} onChange={(event) => setHistoryEnd(event.target.value)} />
+                </label>
+                <label className="form-field">
+                  <span>Aggregation</span>
+                  <select value={historyAggregation} onChange={(event) => setHistoryAggregation(event.target.value)}>
+                    <option>Average</option>
+                    <option>Minimum</option>
+                    <option>Maximum</option>
+                    <option>Interpolative</option>
+                  </select>
+                </label>
+              </div>
+              <div className="chart-surface" ref={historyChartRef} />
+              <JsonViewer value={history} />
+            </Panel>
+
+            <Panel title="Trend pack comparison" subtitle="Correlate multiple traces over the same window.">
+              <div className="chart-surface" ref={trendPackChartRef} />
+              <JsonViewer value={trendPack} />
+            </Panel>
+          </div>
+        ) : null}
+
+        {nav === "events" ? (
+          <div className="page-grid">
+            <Panel
+              title="Alarm and event explorer"
+              subtitle="Mock alarm/event filters plus batch timeline inspection."
+              actions={<button className="primary-button" onClick={loadAlarms}>Load alarms</button>}
+            >
+              <div className="form-grid">
+                <label className="form-field">
+                  <span>Area</span>
+                  <input value={alarmFilters.area} onChange={(event) => setAlarmFilters({ ...alarmFilters, area: event.target.value })} />
+                </label>
+                <label className="form-field">
+                  <span>Module</span>
+                  <input value={alarmFilters.module} onChange={(event) => setAlarmFilters({ ...alarmFilters, module: event.target.value })} />
+                </label>
+                <label className="form-field">
+                  <span>Priority</span>
+                  <input value={alarmFilters.priority} onChange={(event) => setAlarmFilters({ ...alarmFilters, priority: event.target.value })} />
+                </label>
+                <label className="form-field">
+                  <span>Event type</span>
+                  <input value={alarmFilters.eventType} onChange={(event) => setAlarmFilters({ ...alarmFilters, eventType: event.target.value })} />
+                </label>
+              </div>
+              <DataTable data={alarms} columns={alarmColumns} rowClassName={(row) => (row.active ? "row--alert" : "")} />
+              <div className="chart-surface chart-surface--compact" ref={eventChartRef} />
+            </Panel>
+
+            <Panel
+              title="Batch explorer"
+              subtitle="Compare batch counts and inspect phase-level messages."
+              actions={<button className="primary-button" onClick={loadBatches}>Load batches</button>}
+            >
+              <div className="form-grid">
+                <label className="form-field">
+                  <span>Batch ID</span>
                   <input value={batchFilters.batchId} onChange={(event) => setBatchFilters({ ...batchFilters, batchId: event.target.value })} />
                 </label>
-                <label>
-                  Recipe
+                <label className="form-field">
+                  <span>Recipe</span>
                   <input value={batchFilters.recipe} onChange={(event) => setBatchFilters({ ...batchFilters, recipe: event.target.value })} />
                 </label>
-                <label>
-                  Unit
+                <label className="form-field">
+                  <span>Unit</span>
                   <input value={batchFilters.unit} onChange={(event) => setBatchFilters({ ...batchFilters, unit: event.target.value })} />
                 </label>
-                <label>
-                  Phase
+                <label className="form-field">
+                  <span>Phase</span>
                   <input value={batchFilters.phase} onChange={(event) => setBatchFilters({ ...batchFilters, phase: event.target.value })} />
-                </label>
-                <label>
-                  StartTime
-                  <input type="datetime-local" value={batchFilters.start} onChange={(event) => setBatchFilters({ ...batchFilters, start: event.target.value })} />
-                </label>
-                <label>
-                  EndTime
-                  <input type="datetime-local" value={batchFilters.end} onChange={(event) => setBatchFilters({ ...batchFilters, end: event.target.value })} />
                 </label>
               </div>
               <DataTable data={batches} columns={batchColumns} />
+              <div className="chart-surface chart-surface--compact" ref={batchChartRef} />
             </Panel>
-            <Panel title="Batch Comparison" subtitle="Compare successful vs failed batch event counts by batch ID.">
-              <div ref={batchChartRef} className="chart-panel" />
+          </div>
+        ) : null}
+
+        {nav === "opcua" ? (
+          <div className="page-grid">
+            <Panel title="OPC UA workbench" subtitle="Real MCP-backed browsing, reads, browse-path translation, sampled windows, and monitored captures.">
+              <div className="opcua-header">
+                <div className="tab-row">
+                  {opcuaTabs.map((tab) => (
+                    <button
+                      key={tab.key}
+                      className={opcuaTab === tab.key ? "tab-button tab-button--active" : "tab-button"}
+                      onClick={() => setOpcuaTab(tab.key)}
+                    >
+                      {tab.label}
+                    </button>
+                  ))}
+                </div>
+                <label className="form-field form-field--compact">
+                  <span>Preset</span>
+                  <select value={selectedPreset} onChange={(event) => setSelectedPreset(event.target.value)}>
+                    {(opcuaPresets?.presets ?? []).map((preset) => (
+                      <option key={preset.label} value={preset.label}>{preset.label}</option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+
+              {opcuaTab === "discovery" ? (
+                <div className="detail-grid">
+                  <article className="detail-card">
+                    <h3>Discovery actions</h3>
+                    <div className="button-row button-row--stacked">
+                      <button className="primary-button" onClick={() => void runDiscovery("endpoints")}>Discover endpoints</button>
+                      <button className="ghost-button" onClick={() => void runDiscovery("connection")}>Test connection</button>
+                      <button className="ghost-button" onClick={() => void runDiscovery("namespaces")}>Get namespace array</button>
+                      <button className="ghost-button" onClick={() => void runDiscovery("status")}>Get server status</button>
+                    </div>
+                  </article>
+                  <article className="detail-card">
+                    <h3>OPC UA endpoint</h3>
+                    <p>{opcuaPresets?.endpoint ?? status?.mockOpcUaEndpoint ?? "Unknown endpoint"}</p>
+                    <JsonViewer value={toolResponse?.target === "opcua" ? toolResponse : null} />
+                  </article>
+                </div>
+              ) : null}
+
+              {opcuaTab === "browse" ? (
+                <div className="detail-grid detail-grid--wide">
+                  <article className="detail-card">
+                    <h3>Browse node</h3>
+                    <label className="form-field">
+                      <span>Node ID</span>
+                      <input value={browseInput} onChange={(event) => setBrowseInput(event.target.value)} />
+                    </label>
+                    <div className="button-row">
+                      <button className="primary-button" onClick={() => void runBrowse()}>Browse node</button>
+                    </div>
+                  </article>
+                  <article className="detail-card">
+                    <h3>Browse result</h3>
+                    <JsonViewer value={toolResponse?.name === "opcua_browse_node" ? toolResponse.result : null} />
+                  </article>
+                </div>
+              ) : null}
+
+              {opcuaTab === "reads" ? (
+                <div className="detail-grid detail-grid--wide">
+                  <article className="detail-card">
+                    <h3>Single read</h3>
+                    <label className="form-field">
+                      <span>Logical ID or Node ID</span>
+                      <input value={singleReadInput} onChange={(event) => setSingleReadInput(event.target.value)} />
+                    </label>
+                    <button className="primary-button" onClick={() => void runSingleRead()}>Read node</button>
+                  </article>
+                  <article className="detail-card">
+                    <h3>Multi-read</h3>
+                    <label className="form-field">
+                      <span>Node IDs</span>
+                      <textarea value={multiReadInput} onChange={(event) => setMultiReadInput(event.target.value)} rows={6} />
+                    </label>
+                    <button className="ghost-button" onClick={() => void runMultiRead()}>Read nodes</button>
+                  </article>
+                  <article className="detail-card detail-card--full">
+                    <h3>Read results</h3>
+                    <DataTable data={readTableRows} columns={readColumns} />
+                  </article>
+                </div>
+              ) : null}
+
+              {opcuaTab === "translate" ? (
+                <div className="detail-grid">
+                  <article className="detail-card">
+                    <h3>Translate browse path</h3>
+                    <label className="form-field">
+                      <span>Browse path</span>
+                      <input value={translateInput} onChange={(event) => setTranslateInput(event.target.value)} />
+                    </label>
+                    <button className="primary-button" onClick={() => void runTranslate()}>Translate</button>
+                  </article>
+                  <article className="detail-card">
+                    <h3>Translate result</h3>
+                    <JsonViewer value={toolResponse?.name === "opcua_translate_path" ? toolResponse.result : null} />
+                  </article>
+                </div>
+              ) : null}
+
+              {opcuaTab === "sample" ? (
+                <div className="detail-grid detail-grid--wide">
+                  <article className="detail-card">
+                    <h3>Sample nodes for window</h3>
+                    <label className="form-field">
+                      <span>Node IDs</span>
+                      <textarea value={sampleInput} onChange={(event) => setSampleInput(event.target.value)} rows={4} />
+                    </label>
+                    <div className="form-grid">
+                      <label className="form-field">
+                        <span>Start</span>
+                        <input type="datetime-local" value={sampleStart} onChange={(event) => setSampleStart(event.target.value)} />
+                      </label>
+                      <label className="form-field">
+                        <span>End</span>
+                        <input type="datetime-local" value={sampleEnd} onChange={(event) => setSampleEnd(event.target.value)} />
+                      </label>
+                      <label className="form-field">
+                        <span>Max points</span>
+                        <input type="number" value={sampleMaxPoints} onChange={(event) => setSampleMaxPoints(Number(event.target.value))} />
+                      </label>
+                    </div>
+                    <button className="primary-button" onClick={() => void runSample()}>Sample window</button>
+                  </article>
+                  <article className="detail-card detail-card--full">
+                    <h3>Sampled trend</h3>
+                    <div className="chart-surface chart-surface--compact" ref={opcuaChartRef} />
+                    <JsonViewer value={toolResponse?.name === "opcua_sample_nodes_for_window" ? toolResponse.result : null} />
+                  </article>
+                </div>
+              ) : null}
+
+              {opcuaTab === "monitor" ? (
+                <div className="detail-grid detail-grid--wide">
+                  <article className="detail-card">
+                    <h3>Monitor nodes for window</h3>
+                    <label className="form-field">
+                      <span>Node IDs</span>
+                      <textarea value={monitorInput} onChange={(event) => setMonitorInput(event.target.value)} rows={4} />
+                    </label>
+                    <div className="form-grid">
+                      <label className="form-field">
+                        <span>Duration ms</span>
+                        <input type="number" value={monitorDurationMs} onChange={(event) => setMonitorDurationMs(Number(event.target.value))} />
+                      </label>
+                      <label className="form-field">
+                        <span>Sampling ms</span>
+                        <input type="number" value={monitorSamplingMs} onChange={(event) => setMonitorSamplingMs(Number(event.target.value))} />
+                      </label>
+                    </div>
+                    <button className="primary-button" onClick={() => void runMonitor()}>Capture monitor window</button>
+                  </article>
+                  <article className="detail-card detail-card--full">
+                    <h3>Monitor capture</h3>
+                    <div className="chart-surface chart-surface--compact" ref={opcuaChartRef} />
+                    <JsonViewer value={toolResponse?.name === "opcua_monitor_nodes_for_window" ? toolResponse.result : null} />
+                  </article>
+                </div>
+              ) : null}
+            </Panel>
+          </div>
+        ) : null}
+
+        {nav === "runner" ? (
+          <div className="page-grid">
+            <Panel title="Tool runner" subtitle="Inspect the real MCP tool inventory and execute tools through the same-origin proxy.">
+              <div className="runner-layout">
+                <div className="runner-sidebar">
+                  {groupedTools.map(([group, tools]) => (
+                    <section key={group} className="runner-group">
+                      <h3>{group}</h3>
+                      {tools.map((tool) => (
+                        <button
+                          key={`${tool.target}-${tool.name}`}
+                          className={
+                            toolRunnerName === tool.name && toolRunnerTarget === tool.target
+                              ? "runner-tool runner-tool--active"
+                              : "runner-tool"
+                          }
+                          onClick={() => {
+                            setToolRunnerName(tool.name);
+                            setToolRunnerTarget(tool.target);
+                            setToolRunnerArgs("{}");
+                          }}
+                        >
+                          <strong>{tool.name}</strong>
+                          <span>{tool.target.toUpperCase()} · {tool.description}</span>
+                        </button>
+                      ))}
+                    </section>
+                  ))}
+                </div>
+                <div className="runner-main">
+                  <div className="detail-grid">
+                    <article className="detail-card">
+                      <h3>{selectedTool?.name ?? "Tool"}</h3>
+                      <p>{selectedTool?.description}</p>
+                      <p>Target: {toolRunnerTarget.toUpperCase()}</p>
+                      <JsonViewer value={selectedTool?.inputSchema ?? {}} />
+                    </article>
+                    <article className="detail-card">
+                      <h3>Arguments</h3>
+                      <label className="form-field form-field--compact">
+                        <span>MCP target</span>
+                        <select
+                          value={toolRunnerTarget}
+                          onChange={(event) => setToolRunnerTarget(event.target.value as McpTarget)}
+                        >
+                          <option value="rest">REST MCP</option>
+                          <option value="opcua">OPC UA MCP</option>
+                        </select>
+                      </label>
+                      <textarea value={toolRunnerArgs} onChange={(event) => setToolRunnerArgs(event.target.value)} rows={12} />
+                      <div className="button-row">
+                        <button className="primary-button" onClick={() => void runToolRunner()}>Run tool</button>
+                        <button
+                          className="ghost-button"
+                          onClick={() => setToolRunnerArgs(JSON.stringify({ name: selectedTool?.name }, null, 2))}
+                        >
+                          Load sample
+                        </button>
+                      </div>
+                    </article>
+                  </div>
+                  <Panel title="Tool result" subtitle="Normalized JSON response from the MCP proxy.">
+                    <JsonViewer value={toolResponse} />
+                  </Panel>
+                </div>
+              </div>
             </Panel>
           </div>
         ) : null}
 
         {nav === "scenarios" ? (
           <div className="page-grid">
-            <Panel title="Failure Scenario Browser" subtitle="Mock investigation scenarios and their expected evidence.">
+            <Panel title="Failure scenario browser" subtitle="Mock investigation scenarios, modules, and expected evidence outputs.">
               <div className="scenario-grid">
                 {scenarios.map((scenario) => (
                   <article key={scenario.name} className="scenario-card">
-                    <h3>{scenario.name}</h3>
-                    <p>{scenario.description}</p>
-                    <div className="scenario-section">
-                      <span>Modules</span>
-                      <div className="tag-row">
-                        {scenario.relatedModules.map((item) => (
-                          <span key={item} className="tag">{item}</span>
-                        ))}
-                      </div>
+                    <div className="scenario-card__header">
+                      <span className="scenario-card__tone">Scenario</span>
+                      <h3>{scenario.name}</h3>
                     </div>
-                    <div className="scenario-section">
-                      <span>Expected Investigation Output</span>
-                      <ul className="bulleted-list">
-                        {scenario.expectedInvestigationOutputs.map((item) => (
-                          <li key={item}>{item}</li>
+                    <p>{scenario.description}</p>
+                    <div className="scenario-card__section">
+                      <strong>Related modules</strong>
+                      <ul>
+                        {scenario.relatedModules.map((module) => (
+                          <li key={module}>{module}</li>
+                        ))}
+                      </ul>
+                    </div>
+                    <div className="scenario-card__section">
+                      <strong>Expected outputs</strong>
+                      <ul>
+                        {scenario.expectedInvestigationOutputs.map((output) => (
+                          <li key={output}>{output}</li>
                         ))}
                       </ul>
                     </div>
@@ -976,70 +1730,52 @@ function App() {
                 ))}
               </div>
             </Panel>
-            <Panel title="Validation Findings View" subtitle="Example structured review findings displayed with the same table model used by engineering tools.">
-              <DataTable data={validationFindings} columns={findingColumns} />
-            </Panel>
           </div>
         ) : null}
 
-        {nav === "errors" ? (
+        {nav === "setup" ? (
           <div className="page-grid">
-            <Panel title="Error Simulation Panel" subtitle="Toggle the same headers used by tests and API explorer.">
-              <div className="form-grid">
-                <label>
-                  x-mock-error
-                  <select value={headers.errorCode} onChange={(event) => setHeaders({ ...headers, errorCode: event.target.value })}>
-                    <option value="">None</option>
-                    {["401", "403", "404", "408", "429", "500"].map((value) => (
-                      <option key={value} value={value}>{value}</option>
-                    ))}
-                  </select>
-                </label>
-                <label>
-                  x-mock-delay-ms
-                  <input value={headers.delayMs} onChange={(event) => setHeaders({ ...headers, delayMs: event.target.value })} placeholder="2000" />
-                </label>
-                <label className="checkbox">
-                  <input type="checkbox" checked={headers.malformed} onChange={(event) => setHeaders({ ...headers, malformed: event.target.checked })} />
-                  x-mock-malformed
-                </label>
-                <label className="checkbox">
-                  <input type="checkbox" checked={headers.empty} onChange={(event) => setHeaders({ ...headers, empty: event.target.checked })} />
-                  x-mock-empty
-                </label>
+            <Panel title="Connection helper" subtitle="Repo-local MCP, OPC UA, and mock service settings.">
+              <div className="detail-grid">
+                <article className="detail-card">
+                  <h3>Environment example</h3>
+                  <CodeBlock value={helper?.envExample ?? ""} />
+                </article>
+                <article className="detail-card">
+                  <h3>Codex config</h3>
+                  <JsonViewer value={helper?.mcpClientConfig ?? {}} />
+                </article>
+                <article className="detail-card">
+                  <h3>Mock headers</h3>
+                  <div className="form-grid">
+                    <label className="form-field">
+                      <span>Error code</span>
+                      <input value={headers.errorCode} onChange={(event) => setHeaders({ ...headers, errorCode: event.target.value })} />
+                    </label>
+                    <label className="form-field">
+                      <span>Delay ms</span>
+                      <input value={headers.delayMs} onChange={(event) => setHeaders({ ...headers, delayMs: event.target.value })} />
+                    </label>
+                    <label className="checkbox">
+                      <input type="checkbox" checked={headers.malformed} onChange={(event) => setHeaders({ ...headers, malformed: event.target.checked })} />
+                      Malformed
+                    </label>
+                    <label className="checkbox">
+                      <input type="checkbox" checked={headers.empty} onChange={(event) => setHeaders({ ...headers, empty: event.target.checked })} />
+                      Empty
+                    </label>
+                  </div>
+                </article>
               </div>
-              <JsonViewer
-                value={{
-                  headers: {
-                    ...(headers.errorCode ? { "x-mock-error": headers.errorCode } : {}),
-                    ...(headers.delayMs ? { "x-mock-delay-ms": headers.delayMs } : {}),
-                    ...(headers.malformed ? { "x-mock-malformed": "true" } : {}),
-                    ...(headers.empty ? { "x-mock-empty": "true" } : {}),
-                  },
-                }}
-              />
             </Panel>
-          </div>
-        ) : null}
 
-        {nav === "diagrams" ? (
-          <div className="page-grid">
-            <Panel title="Mermaid Diagram Preview" subtitle="Preview generated engineering diagrams in the browser.">
-              <textarea className="diagram-editor" value={diagramSource} onChange={(event) => setDiagramSource(event.target.value)} />
+            <Panel title="Mermaid preview" subtitle="Preview generated engineering diagrams in the same console.">
+              <textarea value={diagramSource} onChange={(event) => setDiagramSource(event.target.value)} rows={10} />
               <div className="mermaid-preview" dangerouslySetInnerHTML={{ __html: diagramSvg }} />
             </Panel>
-          </div>
-        ) : null}
 
-        {nav === "helper" && helper ? (
-          <div className="page-grid">
-            <Panel title="MCP Connection Helper" subtitle="Copy the mock connection settings into the MCP server environment.">
-              <h3>Example .env</h3>
-              <CodeBlock value={helper.envExample} />
-              <h3>Docker Compose Connection</h3>
-              <CodeBlock value={helper.dockerComposeExample} />
-              <h3>Example MCP Client Config</h3>
-              <JsonViewer value={helper.mcpClientConfig} />
+            <Panel title="Last payload" subtitle="Useful while verifying mock endpoints and proxy behavior.">
+              <JsonViewer value={apiResponse ?? toolResponse} />
             </Panel>
           </div>
         ) : null}

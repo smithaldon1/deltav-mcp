@@ -20,6 +20,7 @@ export async function withToolAudit<TInput, TResult>(
       sanitizedInput: sanitizeForError(args.input),
       status: "refused",
       mode: args.config.mode,
+      dataSource: args.config.dataSource,
       callerSession: args.sessionId,
       errorSummary: refusal,
     });
@@ -33,6 +34,7 @@ export async function withToolAudit<TInput, TResult>(
       sanitizedInput: sanitizeForError(args.input),
       status: "success",
       mode: args.config.mode,
+      dataSource: args.config.dataSource,
       callerSession: args.sessionId,
       errorSummary: undefined,
     });
@@ -43,6 +45,7 @@ export async function withToolAudit<TInput, TResult>(
       sanitizedInput: sanitizeForError(args.input),
       status: "error",
       mode: args.config.mode,
+      dataSource: args.config.dataSource,
       callerSession: args.sessionId,
       errorSummary: toErrorSummary(error),
     });

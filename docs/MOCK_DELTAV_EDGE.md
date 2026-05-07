@@ -2,27 +2,28 @@
 
 ## Purpose
 
-`mock-deltav-edge` is a local simulated REST API for development, testing, demos, and CI. It allows the MCP server to operate without a real DeltaV Edge installation.
+`mock-deltav-edge` is a local simulated REST API and browser UI for development, demos, and CI. It lets the MCP server exercise the DeltaV integration boundary without needing a live DeltaV Edge installation.
 
-This mock is not a certified DeltaV Edge emulator.
+It is not a certified DeltaV Edge emulator.
 
 ## What It Supports
 
-- fake bearer-token authentication
-- graph queries by id and path
-- runtime parameter fields like `CV`, `ST`, `MODE`, `OUT`, `SP`, `PV`, `ALM_STATE`, `QUALITY`
-- deterministic history generation with multiple process-behavior scenarios
+- simulated bearer-token authentication
+- graph collection and graph-by-entity routes
+- history collection and history-by-parameter routes
 - alarms/events filtering and pagination
 - batch-event filtering and pagination
-- error, delay, malformed-response, and empty-result simulation
-- a lightweight browser UI for browsing and testing the mock endpoints
+- empty, delayed, malformed, and error-response simulation
+- UI metadata routes used by the browser app
+- static serving of the built UI bundle
 
 ## What It Does Not Support
 
 - live DeltaV control
-- real authentication or enterprise identity integration
-- certified endpoint parity with every DeltaV Edge installation
-- controller downloads or write-like behavior
+- production writes
+- real enterprise identity integration
+- guaranteed parity with every installed DeltaV Edge environment
+- controller downloads or other write-like workflows
 
 ## Routes
 
@@ -36,35 +37,43 @@ Default mock routes:
 - `GET /edge/api/v1/history/:paramId`
 - `GET /edge/api/v1/ae`
 - `GET /edge/api/v1/batchevent`
+- `GET /api/mock-ui/status`
+- `GET /api/mock-ui/scenarios`
+- `GET /api/mock-ui/systems`
+- `GET /api/mock-ui/connection-helper`
 - `GET /health`
 
-These are development assumptions only. Real site routes must still be confirmed against installed DeltaV Edge documentation.
+Real site paths must still be confirmed against installed DeltaV Edge documentation.
 
-## Run It
+## Run The Mock
+
+Local development:
 
 ```bash
 npm run dev:mock
 ```
 
-Or with Docker:
+Build only:
+
+```bash
+npm run build:mock
+```
+
+Docker:
 
 ```bash
 docker compose up --build mock-deltav-edge
 ```
 
-Health endpoint:
+Default addresses:
 
-```text
-http://localhost:8080/health
-```
+- health: `http://localhost:8080/health`
+- UI: `http://localhost:8080/`
+- API base path: `http://localhost:8080/edge/api/v1`
 
-Web UI:
+## Point The MCP Server At The Mock
 
-```text
-http://localhost:8080/
-```
-
-## Point the MCP Server at the Mock
+Use settings like:
 
 ```env
 DELTAV_EDGE_BASE_URL=http://localhost:8080/edge/
@@ -79,21 +88,24 @@ DELTAV_EDGE_ENDPOINT_ALARMS_EVENTS=/api/v1/ae
 DELTAV_EDGE_ENDPOINT_BATCH_EVENTS=/api/v1/batchevent
 ```
 
-## Add Sample Data
+## Mock Data
 
-Mock source data lives under `mock-deltav-edge/src/data/`.
+Source data lives under `mock-deltav-edge/src/data/`.
+
+Primary files:
 
 - `graph.json`
 - `history.json`
 - `alarms-events.json`
 - `batch-events.json`
+- `failure-scenarios.json`
 - `systems/*.json`
 
-Add or edit entities, scenarios, and records there.
+Edit those files to extend demo systems, alarm scenarios, and process trends.
 
-## Web UI
+## Browser UI
 
-The mock service serves a lightweight React/Vite UI from the root path.
+The mock service also serves a React/Vite UI from `/`.
 
 Main views:
 
@@ -111,52 +123,50 @@ Main views:
 - Mermaid Diagram Preview
 - MCP Connection Helper
 
-Visualization stack:
+UI stack:
 
-- React Flow for hierarchy and relationship graphs
-- Apache ECharts for trend and analytics views
-- Mermaid for engineering diagram previews
-- TanStack Table for alarms, events, batch records, and findings
+- React
+- Vite
+- React Flow
+- Apache ECharts
+- Mermaid
+- TanStack Table
 
 Use the UI for:
 
-- confirming the mock base URL and auth behavior
-- interactively browsing demo systems and entity relationships
-- checking history, alarm, event, and batch payloads before using MCP tools
-- reproducing mock error scenarios and request headers
-- demoing generated Mermaid engineering diagrams without external rendering services
+- confirming the mock service is healthy
+- checking graph, history, alarm, and batch payload shapes
+- browsing demo systems before issuing MCP tool calls
+- reproducing mock failure scenarios interactively
+- previewing Mermaid output from diagram tools
 
-Limitations:
+## Error Simulation
 
-- no write-like controls
-- no live DeltaV connectivity
-- no arbitrary file reads
-- no arbitrary URL fetching
-- not a plant simulator or certified DeltaV Edge emulator
-
-## Simulate Errors
-
-Headers and query toggles supported:
+Supported request controls:
 
 - `x-mock-error: 401|403|404|408|429|500`
 - `x-mock-delay-ms: 2000`
 - `x-mock-malformed: true`
 - `x-mock-empty: true`
 
-These are intended for client and MCP integration tests.
+Equivalent query-string toggles are also supported:
 
-The web UI includes an Error Simulation panel that shows the exact header combinations needed to reproduce those behaviors.
+- `mockError`
+- `mockDelayMs`
+- `mockMalformed`
+- `mockEmpty`
 
-## MCP Testing Against the Mock
+These are intended for client robustness testing and MCP integration tests.
 
-Typical local flow:
+## Typical Local Flow
 
-1. Start the mock API with `npm run dev:mock`.
-2. Open `http://localhost:8080/` and confirm the status page and demo systems load.
-3. Point the MCP server at `http://localhost:8080/edge/` using the mock endpoint variables.
-4. Use the API Explorer or History/Alarm/Batch views to confirm the payload shape you expect.
-5. Run MCP tools or `npm test` to exercise the same mock-backed routes under automation.
+1. Start the mock with `npm run dev:mock`.
+2. Open `http://localhost:8080/` and confirm the status page loads.
+3. Point the MCP server at `http://localhost:8080/edge/`.
+4. Enable `DELTAV_USE_MOCK=true` and apply the `/api/v1/*` endpoint overrides.
+5. Run `npm run dev` for the MCP server.
+6. Use MCP tools or `npm test` against the same mock-backed routes.
 
 ## Development-Only Warning
 
-Use this mock only for development, testing, demos, and CI. It is not a validated plant simulator and must not be treated as a production compatibility guarantee.
+Use this mock only for development, testing, demos, and CI. It is not a validated plant simulator and must not be treated as production-compatibility proof.

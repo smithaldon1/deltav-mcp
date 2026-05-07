@@ -1,0 +1,17 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true
+  },
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "tests/**/*.ts",
+    "tests/**/*.tsx",
+    "mock-deltav-edge/src/**/*.ts",
+    "mock-deltav-edge/src/**/*.tsx",
+    "mock-deltav-edge/ui/**/*.ts",
+    "mock-deltav-edge/ui/src/**/*.ts",
+    "mock-deltav-edge/ui/src/**/*.tsx"
+  ]
+}

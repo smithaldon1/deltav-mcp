@@ -1,0 +1,115 @@
+{
+  "scenarios": [
+    {
+      "name": "Motor trip",
+      "description": "Primary feed pump trips, followed by low-flow and permissive-related events.",
+      "relatedModules": ["MTR-201", "FIC-201", "PUMP_SKID_A"],
+      "relatedEventIds": ["AE-1001", "AE-1002"],
+      "relatedHistory": ["FIC-201/PV", "PID1/OUT"],
+      "expectedInvestigationOutputs": [
+        "First-out candidate around MTR-201",
+        "Trend pack showing falling flow after trip",
+        "Timeline showing trip before downstream low-flow consequence"
+      ]
+    },
+    {
+      "name": "Low flow trip",
+      "description": "Flow control loop falls below target, causing a trip chain and operator intervention.",
+      "relatedModules": ["FIC-201", "PID-101"],
+      "relatedEventIds": ["AE-1002", "AE-1009"],
+      "relatedHistory": ["FIC-201/PV", "PID1/PV"],
+      "expectedInvestigationOutputs": [
+        "Correlation between low flow and loop output behavior",
+        "Before/after comparison around operator mode change"
+      ]
+    },
+    {
+      "name": "High temperature alarm",
+      "description": "Reactor temperature exceeds target and phase progression is held.",
+      "relatedModules": ["TIC-301", "PHASE_HEATUP", "REACTOR_01"],
+      "relatedEventIds": ["AE-1003", "AE-1005", "AE-1008"],
+      "relatedHistory": ["TIC-301/PV"],
+      "expectedInvestigationOutputs": [
+        "Excursion trend around TIC-301",
+        "Phase hold timeline linked to temperature deviation"
+      ]
+    },
+    {
+      "name": "Valve failed to open",
+      "description": "A commanded valve movement does not complete, leading to reduced process response.",
+      "relatedModules": ["FV-201", "FIC-201"],
+      "relatedEventIds": ["AE-1004"],
+      "relatedHistory": ["FIC-201/PV"],
+      "expectedInvestigationOutputs": [
+        "Timeline anchored on valve event",
+        "Review of low-flow follow-on effects"
+      ]
+    },
+    {
+      "name": "Chattering alarm",
+      "description": "Level switch transitions repeatedly in a short period.",
+      "relatedModules": ["LSH-401"],
+      "relatedEventIds": ["AE-1006", "AE-1007"],
+      "relatedHistory": ["AI_TEMP_101/PV"],
+      "expectedInvestigationOutputs": [
+        "Chattering alarm detection result",
+        "Nuisance alarm analytics count"
+      ]
+    },
+    {
+      "name": "Repeating nuisance alarm",
+      "description": "Repeated events from the same source create alarm fatigue.",
+      "relatedModules": ["LSH-401", "COMM-501"],
+      "relatedEventIds": ["AE-1006", "AE-1007", "AE-1010"],
+      "relatedHistory": ["AI_TEMP_101/PV"],
+      "expectedInvestigationOutputs": [
+        "Repeating alarm grouping by source",
+        "Priority distribution for nuisance review"
+      ]
+    },
+    {
+      "name": "Batch phase hold",
+      "description": "Heat-up phase enters hold state due to deviation and delays the batch.",
+      "relatedModules": ["PHASE_HEATUP", "REACTOR_01"],
+      "relatedEventIds": ["AE-1008"],
+      "relatedHistory": ["TIC-301/PV"],
+      "expectedInvestigationOutputs": [
+        "Batch deviation window",
+        "Batch timeline highlighting held phase"
+      ]
+    },
+    {
+      "name": "Operator mode change",
+      "description": "Operator switches a loop mode during abnormal operation.",
+      "relatedModules": ["PID-101"],
+      "relatedEventIds": ["AE-1009"],
+      "relatedHistory": ["PID1/PV", "PID1/OUT"],
+      "expectedInvestigationOutputs": [
+        "Compare before/after change summary",
+        "Operator action review point"
+      ]
+    },
+    {
+      "name": "Interlock active",
+      "description": "Protective logic prevents continued operation due to an unsafe condition.",
+      "relatedModules": ["MTR-201", "PUMP_SKID_A"],
+      "relatedEventIds": ["AE-1001", "AE-1002"],
+      "relatedHistory": ["FIC-201/PV"],
+      "expectedInvestigationOutputs": [
+        "First-out candidate list",
+        "Interlock review follow-up questions"
+      ]
+    },
+    {
+      "name": "Device communication failure",
+      "description": "A field device loses communications and drives an alarm condition.",
+      "relatedModules": ["COMM-501"],
+      "relatedEventIds": ["AE-1010"],
+      "relatedHistory": ["AI_TEMP_101/PV"],
+      "expectedInvestigationOutputs": [
+        "Timeline showing comms alarm",
+        "Failure-mode review around bad-quality handling"
+      ]
+    }
+  ]
+}

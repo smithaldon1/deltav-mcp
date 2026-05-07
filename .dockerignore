@@ -1,0 +1,10 @@
+node_modules
+dist
+.git
+.env
+coverage
+logs
+generated-packages
+tests
+docs
+mock-deltav-edge/dist

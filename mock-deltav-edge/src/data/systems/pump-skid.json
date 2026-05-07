@@ -1,0 +1,4 @@
+{
+  "name": "pump-skid",
+  "summary": "Pump skid with motor, flow control loop, suction permissive, and low-flow trip."
+}

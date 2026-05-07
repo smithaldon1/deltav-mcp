@@ -1,0 +1,2 @@
+import { buildEngineeringWorkflowPrompt } from "./helpers.js";
+export const compareStrategyToSiteStandardPrompt = buildEngineeringWorkflowPrompt("compare_strategy_to_site_standard", "Compare a proposed strategy to approved site standards and templates.", ["Read the relevant site-standard resources.", "Highlight naming, alarm philosophy, and template gaps.", "Return explicit review findings and open questions."]);

@@ -1,0 +1,2 @@
+import { buildEngineeringWorkflowPrompt } from "./helpers.js";
+export const generateFatSatProtocolPrompt = buildEngineeringWorkflowPrompt("generate_fat_sat_protocol", "Generate a FAT/SAT protocol proposal with engineering review gates.", ["Cover normal operation, alarms, interlocks, failures, and reset behavior.", "Include evidence gaps as open questions.", "State that approval is required before execution."]);

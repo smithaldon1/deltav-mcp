@@ -1,0 +1,2 @@
+import { buildEngineeringWorkflowPrompt } from "./helpers.js";
+export const generateBatchPhaseDesignPrompt = buildEngineeringWorkflowPrompt("generate_batch_phase_design", "Generate an offline batch phase design proposal.", ["Document phase states, holds, retries, aborts, and transition conditions.", "Use batch event evidence when available.", "Capture unanswered unit ownership and retry questions."]);

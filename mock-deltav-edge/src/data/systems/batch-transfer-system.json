@@ -1,0 +1,4 @@
+{
+  "name": "batch-transfer-system",
+  "summary": "Batch transfer sequence with phase failures and delayed transitions."
+}

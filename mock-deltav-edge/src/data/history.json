@@ -1,0 +1,44 @@
+{
+  "series": [
+    {
+      "paramId": "PID1/PV",
+      "path": "DemoDeltaVSystem/AREA_A/UNIT_100/PID-101/PID1/PV.CV",
+      "scenario": "stable_operation",
+      "baseValue": 54.2,
+      "amplitude": 0.9,
+      "noise": 0.15
+    },
+    {
+      "paramId": "PID1/OUT",
+      "path": "DemoDeltaVSystem/AREA_A/UNIT_100/PID-101/PID1/OUT.CV",
+      "scenario": "oscillation",
+      "baseValue": 51.3,
+      "amplitude": 4.2,
+      "noise": 0.25
+    },
+    {
+      "paramId": "FIC-201/PV",
+      "path": "DemoDeltaVSystem/AREA_A/PUMP_SKID_A/FIC-201/PV.CV",
+      "scenario": "step_change",
+      "baseValue": 123.5,
+      "amplitude": 12,
+      "noise": 0.5
+    },
+    {
+      "paramId": "TIC-301/PV",
+      "path": "DemoDeltaVSystem/AREA_B/REACTOR_01/TIC-301/PV.CV",
+      "scenario": "process_excursion",
+      "baseValue": 180,
+      "amplitude": 16,
+      "noise": 0.4
+    },
+    {
+      "paramId": "AI_TEMP_101/PV",
+      "path": "DemoDeltaVSystem/AREA_A/UNIT_100/AI_TEMP_101/PV.CV",
+      "scenario": "sensor_dropout",
+      "baseValue": 72,
+      "amplitude": 3,
+      "noise": 0.3
+    }
+  ]
+}

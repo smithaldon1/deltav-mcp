@@ -1,0 +1,2 @@
+import { buildEngineeringWorkflowPrompt } from "./helpers.js";
+export const generateAlarmRationalizationPrompt = buildEngineeringWorkflowPrompt("generate_alarm_rationalization", "Generate an alarm rationalization proposal with conservative assumptions.", ["List cause, consequence, operator action, priority basis, and nuisance risk.", "Do not infer safety criticality without evidence.", "Return unresolved philosophy questions explicitly."]);

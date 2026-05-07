@@ -1,0 +1,4 @@
+{
+  "name": "tank-level-control",
+  "summary": "Simple tank level control with inlet valve control and high-high alarm handling."
+}

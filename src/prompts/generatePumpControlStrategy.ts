@@ -1,0 +1,2 @@
+import { buildEngineeringWorkflowPrompt } from "./helpers.js";
+export const generatePumpControlStrategyPrompt = buildEngineeringWorkflowPrompt("generate_pump_control_strategy", "Generate an offline pump control strategy proposal.", ["Use the pump skid pattern and site templates.", "Document start permissives, trips, alarms, and restart expectations.", "Capture open engineering questions for unresolved reset and bypass behavior."]);

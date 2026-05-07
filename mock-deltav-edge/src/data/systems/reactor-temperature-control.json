@@ -1,0 +1,4 @@
+{
+  "name": "reactor-temperature-control",
+  "summary": "Reactor temperature control loop with phase hold and excursion scenarios."
+}

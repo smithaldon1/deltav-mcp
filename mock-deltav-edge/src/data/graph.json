@@ -1,0 +1,222 @@
+{
+  "entities": [
+    {
+      "id": "DemoDeltaVSystem",
+      "name": "DemoDeltaVSystem",
+      "type": "System",
+      "path": "DemoDeltaVSystem",
+      "children": ["AREA_A", "AREA_B", "BATCH_AREA"],
+      "runtime": {}
+    },
+    {
+      "id": "AREA_A",
+      "name": "AREA_A",
+      "type": "Area",
+      "area": "AREA_A",
+      "path": "DemoDeltaVSystem/AREA_A",
+      "children": ["UNIT_100", "PUMP_SKID_A"],
+      "parents": ["DemoDeltaVSystem"],
+      "runtime": {}
+    },
+    {
+      "id": "UNIT_100",
+      "name": "UNIT_100",
+      "type": "Unit",
+      "area": "AREA_A",
+      "path": "DemoDeltaVSystem/AREA_A/UNIT_100",
+      "children": ["PID-101", "TK-101", "AI_TEMP_101"],
+      "parents": ["AREA_A"],
+      "runtime": {}
+    },
+    {
+      "id": "PID-101",
+      "name": "PID-101",
+      "type": "Control Module",
+      "area": "AREA_A",
+      "path": "DemoDeltaVSystem/AREA_A/UNIT_100/PID-101",
+      "children": ["PID1/PV", "PID1/SP", "PID1/OUT"],
+      "parents": ["UNIT_100"],
+      "runtime": {
+        "CV": 54.2,
+        "ST": "GOOD",
+        "MODE": "AUTO",
+        "OUT": 51.3,
+        "SP": 55,
+        "PV": 54.2,
+        "HI_LIM": 100,
+        "LO_LIM": 0,
+        "ALM_STATE": "NORMAL",
+        "QUALITY": "GOOD"
+      }
+    },
+    {
+      "id": "PID1/PV",
+      "name": "PID1/PV",
+      "type": "Parameter",
+      "area": "AREA_A",
+      "path": "DemoDeltaVSystem/AREA_A/UNIT_100/PID-101/PID1/PV",
+      "parents": ["PID-101"],
+      "runtime": {
+        "CV": 54.2,
+        "ST": "GOOD",
+        "QUALITY": "GOOD"
+      }
+    },
+    {
+      "id": "PID1/SP",
+      "name": "PID1/SP",
+      "type": "Parameter",
+      "area": "AREA_A",
+      "path": "DemoDeltaVSystem/AREA_A/UNIT_100/PID-101/PID1/SP",
+      "parents": ["PID-101"],
+      "runtime": {
+        "CV": 55,
+        "ST": "GOOD",
+        "QUALITY": "GOOD"
+      }
+    },
+    {
+      "id": "PID1/OUT",
+      "name": "PID1/OUT",
+      "type": "Parameter",
+      "area": "AREA_A",
+      "path": "DemoDeltaVSystem/AREA_A/UNIT_100/PID-101/PID1/OUT",
+      "parents": ["PID-101"],
+      "runtime": {
+        "CV": 51.3,
+        "ST": "GOOD",
+        "QUALITY": "GOOD"
+      }
+    },
+    {
+      "id": "PUMP_SKID_A",
+      "name": "PUMP_SKID_A",
+      "type": "Equipment Module",
+      "area": "AREA_A",
+      "path": "DemoDeltaVSystem/AREA_A/PUMP_SKID_A",
+      "children": ["MTR-201", "FV-201", "FIC-201"],
+      "parents": ["AREA_A"],
+      "runtime": {
+        "MODE": "AUTO",
+        "ALM_STATE": "ACTIVE"
+      }
+    },
+    {
+      "id": "MTR-201",
+      "name": "MTR-201",
+      "type": "Equipment Module",
+      "area": "AREA_A",
+      "path": "DemoDeltaVSystem/AREA_A/PUMP_SKID_A/MTR-201",
+      "parents": ["PUMP_SKID_A"],
+      "runtime": {
+        "CV": 1,
+        "MODE": "AUTO",
+        "ST": "RUNNING",
+        "QUALITY": "GOOD"
+      }
+    },
+    {
+      "id": "FIC-201",
+      "name": "FIC-201",
+      "type": "Control Module",
+      "area": "AREA_A",
+      "path": "DemoDeltaVSystem/AREA_A/PUMP_SKID_A/FIC-201",
+      "parents": ["PUMP_SKID_A"],
+      "runtime": {
+        "PV": 123.5,
+        "SP": 125,
+        "OUT": 62,
+        "MODE": "AUTO",
+        "QUALITY": "GOOD"
+      }
+    },
+    {
+      "id": "AREA_B",
+      "name": "AREA_B",
+      "type": "Area",
+      "area": "AREA_B",
+      "path": "DemoDeltaVSystem/AREA_B",
+      "children": ["REACTOR_01", "CIP_SKID_01"],
+      "parents": ["DemoDeltaVSystem"],
+      "runtime": {}
+    },
+    {
+      "id": "REACTOR_01",
+      "name": "REACTOR_01",
+      "type": "Unit",
+      "area": "AREA_B",
+      "path": "DemoDeltaVSystem/AREA_B/REACTOR_01",
+      "children": ["TIC-301", "PHASE_HEATUP"],
+      "parents": ["AREA_B"],
+      "runtime": {}
+    },
+    {
+      "id": "TIC-301",
+      "name": "TIC-301",
+      "type": "Control Module",
+      "area": "AREA_B",
+      "path": "DemoDeltaVSystem/AREA_B/REACTOR_01/TIC-301",
+      "parents": ["REACTOR_01"],
+      "runtime": {
+        "PV": 182.4,
+        "SP": 180,
+        "OUT": 33,
+        "MODE": "AUTO",
+        "ALM_STATE": "HIGH",
+        "QUALITY": "GOOD"
+      }
+    },
+    {
+      "id": "PHASE_HEATUP",
+      "name": "PHASE_HEATUP",
+      "type": "Phase",
+      "area": "AREA_B",
+      "path": "DemoDeltaVSystem/AREA_B/REACTOR_01/PHASE_HEATUP",
+      "parents": ["REACTOR_01"],
+      "runtime": {
+        "MODE": "HELD",
+        "ST": "WAITING_FOR_TEMPERATURE"
+      }
+    },
+    {
+      "id": "BATCH_AREA",
+      "name": "BATCH_AREA",
+      "type": "Area",
+      "area": "BATCH_AREA",
+      "path": "DemoDeltaVSystem/BATCH_AREA",
+      "children": ["UNIT_MOD_01", "RECIPE_A"],
+      "parents": ["DemoDeltaVSystem"],
+      "runtime": {}
+    },
+    {
+      "id": "UNIT_MOD_01",
+      "name": "UNIT_MOD_01",
+      "type": "Unit Module",
+      "area": "BATCH_AREA",
+      "path": "DemoDeltaVSystem/BATCH_AREA/UNIT_MOD_01",
+      "parents": ["BATCH_AREA"],
+      "runtime": {
+        "MODE": "AUTO"
+      }
+    },
+    {
+      "id": "RECIPE_A",
+      "name": "RECIPE_A",
+      "type": "Recipe",
+      "area": "BATCH_AREA",
+      "path": "DemoDeltaVSystem/BATCH_AREA/RECIPE_A",
+      "children": ["BATCH_STEP_CHARGE"],
+      "parents": ["BATCH_AREA"],
+      "runtime": {}
+    },
+    {
+      "id": "BATCH_STEP_CHARGE",
+      "name": "BATCH_STEP_CHARGE",
+      "type": "Batch Step",
+      "area": "BATCH_AREA",
+      "path": "DemoDeltaVSystem/BATCH_AREA/RECIPE_A/BATCH_STEP_CHARGE",
+      "parents": ["RECIPE_A"],
+      "runtime": {}
+    }
+  ]
+}

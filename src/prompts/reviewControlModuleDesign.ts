@@ -1,0 +1,2 @@
+import { buildEngineeringWorkflowPrompt } from "./helpers.js";
+export const reviewControlModuleDesignPrompt = buildEngineeringWorkflowPrompt("review_control_module_design", "Review a proposed module design for completeness, risk, and unresolved assumptions.", ["Check modes, permissives, trips, reset behavior, and operator actions.", "Compare naming and alarm structure to site standards.", "Return structured findings with severity and recommendations."]);

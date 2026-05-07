@@ -1,0 +1,13 @@
+{
+  "name": "mock-deltav-edge",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/server.js",
+  "types": "dist/server.d.ts",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "npm run build -w mock-deltav-edge-ui && tsc -p tsconfig.json",
+    "start": "node dist/server.js"
+  }
+}

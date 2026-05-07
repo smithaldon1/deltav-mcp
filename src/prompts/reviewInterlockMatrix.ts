@@ -1,0 +1,2 @@
+import { buildEngineeringWorkflowPrompt } from "./helpers.js";
+export const reviewInterlockMatrixPrompt = buildEngineeringWorkflowPrompt("review_interlock_matrix", "Review an interlock matrix for missing cause/effect/reset coverage.", ["Check protected equipment, reset conditions, bypass policy, and notes.", "Flag unsupported assumptions conservatively.", "Return structured findings with recommended follow-up."]);
